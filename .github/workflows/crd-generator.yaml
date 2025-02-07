@@ -53,7 +53,7 @@ jobs:
       # For pull request events, upload the generated CRD file as an artifact.
       - name: Upload CRD artifact
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@latest
         with:
           name: cipipeline-crd
           path: cipipeline-crd.yaml
