@@ -24,6 +24,39 @@ spec:
             version: 1.0.0
           components:
             schemas:
+              secretSource:
+                type: object
+                description: "Configuration for sourcing credentials from HashiCorp Vault."
+                properties:
+                  vaultAddress:
+                    type: string
+                    description: "Address of the HashiCorp Vault."
+                  secretPath:
+                    type: string
+                    description: "Path to the secret in the Vault."
+                  authMethod:
+                    type: string
+                    enum: ["token", "appRole", "kubernetes"]
+                    description: "Authentication method to use with Vault."
+                  authCredentials:
+                    type: object
+                    description: "Credentials for authenticating with Vault."
+                    properties:
+                      token:
+                        type: string
+                        description: "Token for Vault authentication."
+                      roleId:
+                        type: string
+                        description: "Role ID for AppRole authentication."
+                      secretId:
+                        type: string
+                        description: "Secret ID for AppRole authentication."
+                      jwt:
+                        type: string
+                        description: "JWT for Kubernetes authentication."
+                    additionalProperties: false
+                additionalProperties: false
+                
               CodeReview:
                 type: object
                 description: "Configuration for code review processes."
@@ -36,6 +69,7 @@ spec:
                     type: string
                     description: "Name of the tool if LLM was specified, or the email of the human reviewer if human was selected."
                 additionalProperties: false
+
               Linter:
                 type: object
                 description: "Configuration for linting processes."
@@ -53,6 +87,7 @@ spec:
                       type: string
                     description: "Glob patterns to specify which files should be linted."
                 additionalProperties: false
+
               SecretScan:
                 type: object
                 description: "Configuration for static code secret scanning tools."
@@ -70,6 +105,7 @@ spec:
                     type: string
                     description: "Path to the configuration file for the secret scanning tool."
                 additionalProperties: false
+
               CustomStep:
                 type: object
                 description: "Configuration for a custom execution step."
@@ -99,6 +135,7 @@ spec:
                   - command
                   - containerImage
                 additionalProperties: false
+
               Repository:
                 type: object
                 description: "Configuration for securely accessing a Git repository."
@@ -109,22 +146,10 @@ spec:
                   branch:
                     type: string
                     description: "Branch to check out."
-                  credentialsSource:
-                    type: string
-                    enum: ["hashicorp-vault", "external-secret-manager", "kubernetes-secret"]
-                    description: "Source of the credentials for accessing the repository."
-                  credentialsRef:
-                    type: object
-                    description: "Reference to the credentials stored in the specified source."
-                    properties:
-                      name:
-                        type: string
-                        description: "Name of the secret or credential reference."
-                      key:
-                        type: string
-                        description: "Key in the secret storing the credentials."
-                    additionalProperties: false
+                  credentialsSecret:
+                    $ref: "#/components/schemas/secretSource"
                 additionalProperties: false
+
               CIPipeline:
                 type: object
                 x-kubernetes-group-version-kind:
@@ -161,20 +186,32 @@ spec:
                             type: string
                             description: "Branch name filter for triggering the pipeline."
                         additionalProperties: false
-                      preBuildSteps:
+                      linters:
                         type: array
-                        description: "List of pre-build validations and checks."
+                        description: "List of linter steps."
                         items:
-                          oneOf:
-                            - $ref: "#/components/schemas/Linter"
-                            - $ref: "#/components/schemas/CodeReview"
-                            - $ref: "#/components/schemas/CustomStep"
-                            - $ref: "#/components/schemas/SecretScan"
+                          $ref: "#/components/schemas/Linter"
+                      codeReviews:
+                        type: array
+                        description: "List of code review steps."
+                        items:
+                          $ref: "#/components/schemas/CodeReview"
+                      customSteps:
+                        type: array
+                        description: "List of custom execution steps."
+                        items:
+                          $ref: "#/components/schemas/CustomStep"
+                      secretScans:
+                        type: array
+                        description: "List of static code secret scanning steps."
+                        items:
+                          $ref: "#/components/schemas/SecretScan"
                       ociBuild:
                         type: object
                         description: >
-                          Settings for building the container image. Note: If taggingStrategy is 'custom', then customTag should be provided. This conditional requirement must be enforced by a validating admission webhook.
-
+                          Settings for building the container image.
+                          Note: If taggingStrategy is 'custom', then customTag should be provided.
+                          This conditional requirement must be enforced by a validating admission webhook.
                         properties:
                           dockerfile:
                             type: string
@@ -204,19 +241,8 @@ spec:
                           repository:
                             type: string
                             description: "Repository name in the registry."
-                          credentialsSource:
-                            type: string
-                            enum: ["hashicorp-vault", "external-secret-manager", "kubernetes-secret"]
-                            description: "Source of the credentials for accessing the repository."
-                          credentialsRef:
-                            type: object
-                            description: "Reference to a Kubernetes Secret or external secret for registry credentials."
-                            properties:
-                              name:
-                                type: string
-                              key:
-                                type: string
-                            additionalProperties: false
+                          credentialsSecret:
+                            $ref: "#/components/schemas/secretSource"
                         additionalProperties: false
                       notifications:
                         type: object
@@ -236,3 +262,4 @@ spec:
                       - ociRegistry
                     additionalProperties: false
                 additionalProperties: false
+          additionalProperties: false
