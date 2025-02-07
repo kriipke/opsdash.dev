@@ -14,6 +14,8 @@ on:
 jobs:
   generate-crd:
     runs-on: ubuntu-latest
+    env:
+      CRD_PATH: "deploy/crd-cipipeline.yaml"
     steps:
       # Check out the repository code.
       - uses: actions/checkout@v3
@@ -27,14 +29,14 @@ jobs:
       # Run the command to generate the CRD file.
       - name: Generate CRD file
         run: |
-          yq eval '.spec.versions[0].schema.openAPIV3Schema = load("src/openapi.yaml")' src/crd-template.yaml > deploy/crd-cipipeline.yaml
-          cat deploy/crd-cipipeline.yaml
+          yq eval '.spec.versions[0].schema.openAPIV3Schema = load("src/openapi.yaml")' src/crd-template.yaml > ${{ env.CRD_PATH }}
+          cat ${{ env.CRD_PATH }}
 
       # Check if cipipeline-crd.yaml has changed.
       - name: Check for changes in cipipeline-crd.yaml
         id: check_changes
         run: |
-          if git diff --quiet deploy/crd-cipipeline.yaml; then
+          if git diff --quiet ${{ env.CRD_PATH }}; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -46,7 +48,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cipipeline-crd.yaml
+          git add ${{ env.CRD_PATH }}
           git commit -m "Update generated CIPipeline CRD"
           git push
       - name: Upload CRD artifact
@@ -54,5 +56,4 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           name: cipipeline-crd
-          path: cipipeline-crd.yaml
-
+          path: ${{ env.CRD_PATH }}
