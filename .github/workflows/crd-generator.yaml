@@ -49,11 +49,10 @@ jobs:
           git add cipipeline-crd.yaml
           git commit -m "Update generated CIPipeline CRD"
           git push
-
-      # For pull request events, upload the generated CRD file as an artifact.
       - name: Upload CRD artifact
+        uses: actions/upload-artifact@v4
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@latest
         with:
           name: cipipeline-crd
           path: cipipeline-crd.yaml
+
