@@ -1,0 +1,58 @@
+name: Generate CIPipeline CRD
+
+on:
+  push:
+    paths:
+      - openapi.yaml
+      - crd-template.yaml
+  pull_request:
+    paths:
+      - openapi.yaml
+      - crd-template.yaml
+
+jobs:
+  generate-crd:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the repository code.
+      - uses: actions/checkout@v3
+
+      # Install yq from GitHub releases.
+      - name: Install yq
+        run: |
+          sudo wget -O /usr/bin/yq https://github.com/mikefarah/yq/releases/download/v4.30.8/yq_linux_amd64
+          sudo chmod +x /usr/bin/yq
+
+      # Run the command to generate the CRD file.
+      - name: Generate CRD file
+        run: |
+          yq eval '.spec.versions[0].schema.openAPIV3Schema = load("openapi.yaml")' crd-template.yaml > cipipeline-crd.yaml
+          cat cipipeline-crd.yaml
+
+      # Check if cipipeline-crd.yaml has changed.
+      - name: Check for changes in cipipeline-crd.yaml
+        id: check_changes
+        run: |
+          if git diff --quiet cipipeline-crd.yaml; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # Commit and push changes if this is a push event and the generated file was updated.
+      - name: Commit and push updated CRD file
+        if: github.event_name == 'push' && steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cipipeline-crd.yaml
+          git commit -m "Update generated CIPipeline CRD"
+          git push
+
+      # For pull request events, upload the generated CRD file as an artifact.
+      - name: Upload CRD artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v3
+        with:
+          name: cipipeline-crd
+          path: cipipeline-crd.yaml
