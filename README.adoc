@@ -1,10 +1,41 @@
 = opsdash
-toc:
-toclevels: 2
+ifdef::env-github[]
+:status:
+:caution-caption: :fire:
+:important-caption: :exclamation:
+:note-caption: :paperclip:
+:tip-caption: :bulb:
+:warning-caption: :warning:
+endif::[]
+:url-org: https://github.com/kriipke
+:url-repo: {url-org}/gitops-paper
+:url-project: https://asciidoctor.org
+ifdef::env-site[:url-project: link:]
+:url-docs: https://docs.asciidoctor.org
+:url-issues: {url-repo}/issues
+:url-contributors: {url-repo}/graphs/contributors
+:url-rel-file-base: link:
+:url-rel-tree-base: link:
+ifdef::env-site,env-yard[]
+:url-rel-file-base: {url-repo}/blob/HEAD/
+:url-rel-tree-base: {url-repo}/tree/HEAD/
+endif::[]
+:url-changelog: {url-rel-file-base}CHANGELOG.adoc
+:url-contribute: {url-rel-file-base}CONTRIBUTING.adoc
+:url-license: {url-rel-file-base}LICENSE
+:url-tests: {url-rel-tree-base}test
+:image-url-screenshot: https://cdn.jsdelivr.net/gh/asciidoctor/asciidoctor/screenshot.png
+:toc-placement!:
+:toc-title:
+:toc:
+
+toc::[]
 
 == `CIPipeline` Usage
 
 === Example 1: Minimal Pipeline Using Existing Secrets
+
+==== CIPipeline Manifest
 
 In this simple example, both the source repository and the container registry credentials are provided via existing Kubernetes secrets. No pre‑build steps or triggers are defined.
 
@@ -30,6 +61,38 @@ spec:
     # Reference an existing Kubernetes secret containing registry credentials.
     existingSecret: "minimal-registry-credentials"
 ```
+
+==== Rendered Output (Simulated)
+
+For a minimal pipeline where both repository and registry credentials come from existing Kubernetes secrets, the application might output a GitHub Actions workflow like this:
+
+```yaml
+# .github/workflows/minimal-pipeline.yml
+name: Minimal Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          repository: example/minimal-repo
+          ref: main
+      - name: Build Docker Image
+        run: |
+          docker build -f Dockerfile -t registry.example.com/minimal/repo:latest .
+      - name: Push Docker Image
+        run: |
+          docker push registry.example.com/minimal/repo:latest
+```
+
+In this pipeline, the checkout step uses the repository URL and branch from the CIPipeline manifest, and the Docker build/push steps operate on the provided Dockerfile and registry information.
+
 
 ---
 
@@ -96,9 +159,98 @@ spec:
     email: "ops@example.com"
 ```
 
+==== Rendered Output (Simulated)
+
+
+For a more complex pipeline (with linting, code review, a custom build step, secret scanning, and notifications) targeting Jenkins, the application might render a Declarative Pipeline (Jenkinsfile) as follows:
+
+```groovy
+// Jenkinsfile for complex-pipeline-inline-secrets
+pipeline {
+    agent any
+
+    // Triggering the build based on SCM polling (matching a push on the "develop" branch)
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout from the "develop" branch of the repository
+                checkout([$class: 'GitSCM',
+                          branches: [[name: 'develop']],
+                          userRemoteConfigs: [[url: 'https://github.com/example/complex-repo.git']]
+                ])
+            }
+        }
+        stage('Lint') {
+            steps {
+                // Run ESLint using the provided configuration
+                sh 'eslint -c .eslintrc.json "src/**/*.js"'
+            }
+        }
+        stage('Code Review') {
+            steps {
+                // Simulate a code review step (e.g., notify a human reviewer)
+                echo "Code review by reviewer@example.com"
+            }
+        }
+        stage('Custom Build Step') {
+            steps {
+                // Execute a custom build step inside a container (using Node.js image)
+                container('node:14') {
+                    sh 'npm run build'
+                }
+            }
+        }
+        stage('Secret Scan') {
+            steps {
+                // Run a secret scanning tool (e.g., trufflehog)
+                sh 'trufflehog --config trufflehog-config.yml .'
+            }
+        }
+        stage('OCI Build') {
+            steps {
+                // Build the Docker image from Dockerfile.complex in the "app" directory
+                dir('app') {
+                    sh 'docker build -f ../Dockerfile.complex -t complex-repo:latest .'
+                }
+            }
+        }
+        stage('OCI Registry Push') {
+            steps {
+                // Tag and push the Docker image to the registry
+                sh 'docker tag complex-repo:latest registry.example.com/complex/repo:latest'
+                sh 'docker push registry.example.com/complex/repo:latest'
+            }
+        }
+        stage('Notify') {
+            steps {
+                // Send a notification via webhook
+                sh 'curl -X POST -d "Build completed" https://hooks.example.com/notify'
+            }
+        }
+    }
+    post {
+        failure {
+            // Send an email notification on failure
+            mail to: 'ops@example.com',
+                 subject: "Jenkins Build Failed: ${env.JOB_NAME}",
+                 body: "Please check the Jenkins logs for details."
+        }
+    }
+}
+```
+
+This Jenkinsfile incorporates the various stages from the CIPipeline manifest: checking out from the specified repo/branch, running linting and code review steps, executing a custom build command, scanning for secrets, building the image from a custom Dockerfile, pushing to the registry, and sending a notification.
+
+
 ---
 
 === Example 3: Mixed Credential Approaches
+
+==== CIPipeline Manifest
 
 In this example, the repository credentials are provided via an existing secret while the registry credentials use an inline externalSecret that itself references an existing Kubernetes secret (via its `existingSecret` field). This mixed approach allows you to mix and match your credential sourcing methods.
 
@@ -130,9 +282,46 @@ spec:
       existingSecret: "mixed-registry-vault-secret"
 ```
 
+==== Rendered Output (Simulated)
+
+When the repository credentials come from an existing secret and the registry credentials use an inline externalSecret (which itself references an existing secret), the application might render a GitLab CI pipeline (`.gitlab-ci.yml`) like this:
+
+```yaml
+# .gitlab-ci.yml for mixed-credentials-pipeline
+stages:
+  - checkout
+  - build
+  - deploy
+
+variables:
+  CUSTOM_TAG: "v2.0.1"
+
+checkout_job:
+  stage: checkout
+  script:
+    - echo "Cloning repository from https://github.com/example/mixed-repo.git (branch: main)"
+    - git clone --branch main https://github.com/example/mixed-repo.git
+
+build_job:
+  stage: build
+  script:
+    - echo "Building Docker image using Dockerfile"
+    - docker build -f Dockerfile -t mixed-repo:$CUSTOM_TAG .
+    - docker tag mixed-repo:$CUSTOM_TAG registry.example.com/mixed/repo:$CUSTOM_TAG
+
+deploy_job:
+  stage: deploy
+  script:
+    - echo "Pushing Docker image to registry"
+    - docker push registry.example.com/mixed/repo:$CUSTOM_TAG
+```
+
+
 ---
 
 === Example 4: Advanced Pipeline with Multiple Pre‑Build Steps and Advanced Triggers
+
+==== CIPipeline Manifest
 
 This comprehensive example shows an advanced configuration that includes multiple pre‑build steps (two linters, one code review, one custom step, and one secret scan), detailed triggers (for pull requests on feature branches), and notifications. The repository credentials are specified via an inline externalSecret referencing an existing Kubernetes secret, while the registry credentials are provided by an existing secret.
 
@@ -194,6 +383,80 @@ spec:
     email: "advanced-ops@example.com"
 ```
 
+==== Rendered Output (Simulated)
+
+For an advanced configuration that includes multiple linting stages, code review via an LLM, custom testing, secret scanning, a custom OCI build with a custom tag, and notifications, targeting Azure Pipelines the rendered output might look like this:
+
+```yaml
+# azure-pipelines.yml for advanced-pipeline
+trigger:
+  branches:
+    include:
+      - 'feature/*'
+pr:
+  branches:
+    include:
+      - 'feature/*'
+
+jobs:
+- job: AdvancedPipeline
+  displayName: 'Advanced Pipeline Job'
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - checkout: self
+    persistCredentials: true
+    clean: true
+  - script: |
+      echo "Running linters: pylint and flake8"
+      pylint --rcfile=pylintrc src/**/*.py
+      flake8 --config=.flake8 src/**/*.py
+    displayName: 'Lint Code'
+  - script: |
+      echo "Performing code review using LLM (openai-gpt)"
+    displayName: 'Code Review'
+  - script: |
+      echo "Executing custom tests with pytest"
+      pytest --maxfail=1
+    displayName: 'Custom Step: Test'
+  - script: |
+      echo "Running secret scan with detect-secrets"
+      detect-secrets scan --config-file detect-secrets-config.yml
+    displayName: 'Secret Scan'
+  - script: |
+      echo "Building Docker image from Dockerfile.advanced in build/ directory"
+      cd build
+      docker build -f Dockerfile.advanced -t advanced-repo:$(Build.BuildId) .
+    displayName: 'OCI Build'
+  - script: |
+      echo "Pushing Docker image to registry.advanced.com/advanced/repo"
+      docker tag advanced-repo:$(Build.BuildId) registry.advanced.com/advanced/repo:$(Build.BuildId)
+      docker push registry.advanced.com/advanced/repo:$(Build.BuildId)
+    displayName: 'OCI Registry Push'
+  - script: |
+      echo "Sending notifications"
+      curl -X POST -d "Build completed" https://hooks.advanced.com/notify
+    displayName: 'Notify'
+```
+
+This Azure Pipelines YAML file defines a job that:
+- Triggers on pull requests and pushes to feature branches.
+- Checks out the repository.
+- Runs two linter steps (pylint and flake8) over Python source files.
+- Executes a simulated code review step.
+- Runs a custom test suite with pytest.
+- Scans for secrets using detect-secrets.
+- Builds a Docker image from a custom Dockerfile located in the `build/` directory (tagged with a custom tag, e.g., `v3.5.2`).
+- Pushes the built image to the advanced registry.
+- Finally, sends a notification via a webhook.
 ---
 
 These examples demonstrate the flexibility of the latest CIPipeline CRD. They cover scenarios from a minimal pipeline using existing secrets to complex pipelines with multiple pre‑build steps, advanced triggers, and mixed approaches for credential sourcing. Adjust the values and configurations as needed to match your environment and operational requirements.
+
+
+
+
+
+
+
+
