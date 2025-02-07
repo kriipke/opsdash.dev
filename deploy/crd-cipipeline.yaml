@@ -1,237 +1,315 @@
+# CIPipeline CRD for managing CI pipelines that build container images from source code.
+# This CRD allows users to specify a source repository, pre-build steps, and details
+# for building and pushing container images. The CRD supports multiple CI systems,
+# such as Jenkins, GitHub Actions, GitLab CI, and Azure Pipelines.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  # The name of this CRD in the Kubernetes API.
   name: cipipelines.opsdash.dev
 spec:
+  # The API group under which this CRD is registered.
   group: opsdash.dev
+  # This CRD is namespaced, meaning that each instance is scoped to a namespace.
   scope: Namespaced
   names:
-    plural: cipipelines
-    singular: cipipeline
-    kind: CIPipeline
+    plural: cipipelines          # Plural name for this CRD (used in API URLs)
+    singular: cipipeline         # Singular name for this CRD
+    kind: CIPipeline             # The kind of the custom resource
     shortNames:
-      - cp
+      - cp                      # Short alias for ease of use with kubectl
   versions:
-    - name: v1alpha1
-      served: true
-      storage: true
+    - name: v1alpha1            # Version of the CRD API
+      served: true              # This version is served by the API server
+      storage: true             # This version is used for storing objects
       schema:
         openAPIV3Schema:
           openapi: 3.0.0
           info:
             title: CIPipeline API
-            description: API specification for managing CI Pipelines
-            version: 1.0.0
+            description: >
+              API specification for managing CI Pipelines.
+              This CRD defines the structure for configuring CI pipelines that:
+                - Fetch source code from a Git repository.
+                - Execute pre-build steps (such as linting, code reviews, custom commands,
+                  and secret scanning) to validate and prepare the code.
+                - Build a container image using a specified Dockerfile and context.
+                - Push the built image to a container registry.
+              The CRD supports different CI systems and includes mechanisms for providing
+              credentials via Vault or existing Kubernetes secrets.
+            version: "1.0.0"
           components:
             schemas:
+              # SecretSource defines how credentials for external systems (e.g., Vault)
+              # are provided. It supports two methods:
+              # 1. Inline credentials using the authCredentials field.
+              # 2. Referencing an existing Kubernetes secret using the existingSecret field.
               SecretSource:
                 type: object
-                description: "Configuration for sourcing credentials from HashiCorp Vault. Either inline credentials (via authCredentials) or an existing Kubernetes secret (existingSecret) should be provided."
+                description: >
+                  Configuration for sourcing credentials from HashiCorp Vault.
+                  Either inline credentials (via authCredentials) or an existing Kubernetes secret
+                  (existingSecret) should be provided.
                 properties:
                   vaultAddress:
                     type: string
-                    description: "Address of the HashiCorp Vault."
+                    description: "The base URL of the HashiCorp Vault server."
                   secretPath:
                     type: string
-                    description: "Path to the secret in the Vault."
+                    description: "The path in Vault where the secret is stored."
                   authMethod:
                     type: string
                     enum: ["token", "appRole", "kubernetes"]
-                    description: "Authentication method to use with Vault."
+                    description: "The method to authenticate with Vault."
                   authCredentials:
                     type: object
-                    description: "Credentials for authenticating with Vault."
+                    description: >
+                      Inline credentials for Vault authentication. Only one of authCredentials
+                      or existingSecret should be provided.
                     properties:
                       token:
                         type: string
-                        description: "Token for Vault authentication."
+                        description: "A Vault token used for authentication."
                       roleId:
                         type: string
-                        description: "Role ID for AppRole authentication."
+                        description: "The Role ID for AppRole authentication."
                       secretId:
                         type: string
-                        description: "Secret ID for AppRole authentication."
+                        description: "The Secret ID for AppRole authentication."
                       jwt:
                         type: string
-                        description: "JWT for Kubernetes authentication."
+                        description: "A JSON Web Token (JWT) for Kubernetes authentication."
                     additionalProperties: false
                   existingSecret:
                     type: string
-                    description: "Name of an existing Kubernetes secret containing the required credential (e.g. secretId for AppRole or jwt for Kubernetes). Only one of authCredentials or existingSecret should be provided."
+                    description: >
+                      The name of an existing Kubernetes Secret containing the required credentials
+                      (e.g. secretId for AppRole or jwt for Kubernetes).
+                      Only one of authCredentials or existingSecret should be provided.
                 additionalProperties: false
 
+              # CodeReview defines a step in which code is reviewed. This may be done by a human or an LLM.
               CodeReview:
                 type: object
-                description: "Configuration for code review processes."
+                description: "Configuration for code review processes within the pipeline."
                 properties:
                   codeReviewerType:
                     type: string
                     enum: ["human", "llm"]
-                    description: "Type of code reviewer, either a human or an LLM tool."
+                    description: "Specifies whether a human or an LLM tool should perform the code review."
                   codeReviewer:
                     type: string
-                    description: "Name of the tool if LLM was specified, or the email of the human reviewer if human was selected."
+                    description: >
+                      The identifier for the reviewer.
+                      For a human, this might be an email address; for an LLM, a tool name.
                 additionalProperties: false
 
+              # Linter defines a static analysis step to check the code quality.
               Linter:
                 type: object
-                description: "Configuration for linting processes."
+                description: >
+                  Configuration for a linting step.
+                  This step uses a linter tool to perform static analysis on the source code.
                 properties:
                   name:
                     type: string
                     enum: ["eslint", "pylint", "flake8", "rubocop", "golangci-lint", "stylelint", "checkstyle", "phpcs", "jshint", "tslint", "clang-tidy", "cppcheck", "mypy", "bandit", "shellcheck", "hadolint", "ktlint", "detekt", "sonarlint", "prettier"]
-                    description: "Name of the linter tool."
+                    description: "The linter tool to be used."
                   configPath:
                     type: string
-                    description: "Path to the configuration file for the linter."
+                    description: "Path to the linter's configuration file."
                   globPatterns:
                     type: array
                     items:
                       type: string
-                    description: "Glob patterns to specify which files should be linted."
+                    description: "File patterns to specify which files should be linted."
                 additionalProperties: false
 
+              # SecretScan defines a step that scans the source code for embedded secrets.
               SecretScan:
                 type: object
-                description: "Configuration for static code secret scanning tools."
+                description: >
+                  Configuration for a secret scanning step.
+                  This step uses a tool to scan the code for any embedded secrets.
                 properties:
                   toolName:
                     type: string
                     enum: ["gitleaks", "trufflehog", "detect-secrets", "git-secrets", "secretscanner", "whispers", "shhgit", "repo-supervisor", "yelp-detect-secrets", "bandit", "credstash", "aws-secrets-manager", "gitrob", "dops-secrets-scanner", "vault", "blackduck", "sonarqube", "checkov", "semgrep", "codescan"]
-                    description: "Name of the secret scanning tool."
+                    description: "The secret scanning tool to use."
                   globPatterns:
                     type: array
                     items:
                       type: string
-                    description: "Glob patterns to specify which files should be scanned."
+                    description: "File patterns to scan for secrets."
                   configPath:
                     type: string
                     description: "Path to the configuration file for the secret scanning tool."
                 additionalProperties: false
 
+              # CustomStep defines a step that runs an arbitrary shell command.
               CustomStep:
                 type: object
-                description: "Configuration for a custom execution step."
+                description: >
+                  Configuration for a custom execution step.
+                  This step can be used to run arbitrary shell commands in a container.
                 properties:
                   command:
                     type: string
-                    description: "Shell command to run."
+                    description: "The shell command to execute."
                   shell:
                     type: string
                     enum: ["sh", "bash", "zsh"]
-                    description: "Shell type to use (optional)."
+                    description: "The shell environment in which to execute the command."
                   containerImage:
                     type: string
-                    description: "Container image to use for execution."
+                    description: "The container image in which the command should run."
                   successCriteria:
                     type: object
-                    description: "Criteria to determine if the command was successful."
+                    description: "Criteria to determine whether the command was executed successfully."
                     properties:
                       statusCode:
                         type: integer
-                        description: "Expected status code for success."
+                        description: "The expected exit code from the command."
                       outputRegex:
                         type: string
-                        description: "Regex pattern that should be found in the output for success."
+                        description: "A regular expression that should match the command's output on success."
                     additionalProperties: false
                 required:
                   - command
                   - containerImage
                 additionalProperties: false
 
+              # Repository defines how to access a Git repository.
               Repository:
                 type: object
-                description: "Configuration for securely accessing a Git repository."
+                description: >
+                  Configuration for securely accessing a Git repository containing the source code.
+                  This includes the repository URL, branch, and credentials.
                 properties:
                   url:
                     type: string
-                    description: "URL of the Git repository."
+                    description: "The URL of the Git repository."
                   branch:
                     type: string
-                    description: "Branch to check out."
+                    description: "The branch to be checked out from the repository."
+                  # Credentials for accessing the repository can be provided either inline (externalSecret)
+                  # or by referencing an existing Kubernetes secret (existingSecret).
                   externalSecret:
                     $ref: "#/components/schemas/SecretSource"
                   existingSecret:
                     type: string
-                    description: "Name of an existing Kubernetes secret containing credentials. Only one of externalSecret or existingSecret must be provided."
+                    description: >
+                      The name of an existing Kubernetes secret containing the repository credentials.
+                      Only one of externalSecret or existingSecret must be provided.
                 additionalProperties: false
 
+              # CIPipeline defines the complete configuration for a CI pipeline.
               CIPipeline:
                 type: object
                 x-kubernetes-group-version-kind:
                   - group: opsdash.dev
                     version: v1alpha1
                     kind: CIPipeline
+                description: >
+                  The CIPipeline custom resource defines the configuration for a continuous integration pipeline.
+                  It includes all the settings needed to build a container image from source code.
+                  This includes:
+                    - The source repository (and its credentials).
+                    - The CI system to be used.
+                    - Trigger settings that define when the pipeline should run.
+                    - Pre-build steps (such as linters, code reviews, custom commands, and secret scans)
+                      that validate and prepare the code before building the container image.
+                    - Configuration for building the container image (OCI Build).
+                    - Settings for pushing the built image to a container registry (OCI Registry).
+                    - Notification settings for pipeline events.
                 properties:
                   apiVersion:
                     type: string
                     example: "opsdash.dev/v1alpha1"
+                    description: "The API version of this CIPipeline resource."
                   kind:
                     type: string
                     example: "CIPipeline"
+                    description: "The kind of this custom resource."
                   metadata:
                     type: object
+                    description: >
+                      Standard Kubernetes metadata. Additional metadata (such as labels and annotations)
+                      provided by the user will be preserved.
                     x-kubernetes-preserve-unknown-fields: true
                   spec:
                     type: object
+                    description: "The specification of the CI pipeline."
                     properties:
                       srcRepository:
                         $ref: "#/components/schemas/Repository"
                       ciSystem:
                         type: string
-                        description: "The CI system to use (e.g., Jenkins, GitHub Actions, GitLab CI)."
                         enum: ["jenkins", "github", "gitlab", "azure"]
+                        description: >
+                          The CI system to use for executing the pipeline.
+                          Valid options include:
+                          - jenkins: Jenkins-based pipelines.
+                          - github: GitHub Actions.
+                          - gitlab: GitLab CI.
+                          - azure: Azure Pipelines.
                       triggers:
                         type: object
-                        description: "Event-based trigger configuration."
+                        description: >
+                          Configuration for event-based triggers that initiate the pipeline.
+                          For example, this may include settings for push events or pull request events.
                         properties:
                           event:
                             type: string
-                            description: "Event type that triggers the pipeline (e.g., push, pull_request)."
+                            description: "The event type that triggers the pipeline (e.g., push, pull_request)."
                           branch:
                             type: string
-                            description: "Branch name filter for triggering the pipeline."
+                            description: "The branch filter for the trigger event."
                         additionalProperties: false
                       linters:
                         type: array
-                        description: "List of linter steps."
+                        description: "A list of linter steps to run before building the container image."
                         items:
                           $ref: "#/components/schemas/Linter"
                       codeReviews:
                         type: array
-                        description: "List of code review steps."
+                        description: "A list of code review steps to perform on the source code."
                         items:
                           $ref: "#/components/schemas/CodeReview"
                       customSteps:
                         type: array
-                        description: "List of custom execution steps."
+                        description: "A list of custom execution steps to run before building the container image."
                         items:
                           $ref: "#/components/schemas/CustomStep"
                       secretScans:
                         type: array
-                        description: "List of static code secret scanning steps."
+                        description: "A list of secret scanning steps to execute on the source code."
                         items:
                           $ref: "#/components/schemas/SecretScan"
                       ociBuild:
                         type: object
                         description: >
-                          Settings for building the container image.
-                          Note: If taggingStrategy is 'custom', then customTag should be provided.
-                          This conditional requirement must be enforced by a validating admission webhook.
+                          Configuration for building the container image.
+                          Note: If the taggingStrategy is 'custom', then the customTag field must be provided.
+                          A validating admission webhook should enforce this condition.
                         properties:
                           dockerfile:
                             type: string
-                            description: "Path to the Dockerfile."
+                            description: "The file path to the Dockerfile used for building the image."
                           context:
                             type: string
-                            description: "Directory context for the build."
+                            description: "The directory context for the Docker build."
                           taggingStrategy:
                             type: string
                             enum: ["git-commit", "semver", "custom"]
-                            description: "Strategy for tagging the built image."
+                            description: >
+                              The strategy for tagging the built image.
+                              - git-commit: Use the Git commit hash.
+                              - semver: Use semantic versioning.
+                              - custom: Use a custom tag provided by the user.
                           customTag:
                             type: string
-                            description: "Custom tag value. Should be provided when taggingStrategy is 'custom'."
+                            description: "A custom tag value; required if taggingStrategy is 'custom'."
                         required:
                           - dockerfile
                           - context
@@ -239,19 +317,22 @@ spec:
                         additionalProperties: false
                       ociRegistry:
                         type: object
-                        description: "Container registry configuration."
+                        description: >
+                          Configuration for pushing the built container image to a container registry.
                         properties:
                           url:
                             type: string
-                            description: "Registry URL."
+                            description: "The URL of the container registry."
                           repository:
                             type: string
-                            description: "Repository name in the registry."
+                            description: "The repository name within the container registry."
                           externalSecret:
                             $ref: "#/components/schemas/SecretSource"
                           existingSecret:
                             type: string
-                            description: "Name of an existing Kubernetes secret containing credentials. Only one of externalSecret or existingSecret must be provided."
+                            description: >
+                              The name of an existing Kubernetes secret containing the registry credentials.
+                              Only one of externalSecret or existingSecret should be provided.
                         additionalProperties: false
                       notifications:
                         type: object
@@ -259,10 +340,10 @@ spec:
                         properties:
                           webhook:
                             type: string
-                            description: "Webhook URL for notifications."
+                            description: "The webhook URL to which notifications will be sent."
                           email:
                             type: string
-                            description: "Email address for notifications."
+                            description: "The email address to receive notifications."
                         additionalProperties: false
                     required:
                       - srcRepository
