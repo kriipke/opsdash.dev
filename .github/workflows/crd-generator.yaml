@@ -27,7 +27,7 @@ jobs:
       # Run the command to generate the CRD file.
       - name: Generate CRD file
         run: |
-          yq eval '.spec.versions[0].schema.openAPIV3Schema = load("openapi.yaml")' crd-template.yaml > cipipeline-crd.yaml
+          yq eval '.spec.versions[0].schema.openAPIV3Schema = load("openapi.yaml")' src/crd-template.yaml > cipipeline-crd.yaml
           cat cipipeline-crd.yaml
 
       # Check if cipipeline-crd.yaml has changed.
