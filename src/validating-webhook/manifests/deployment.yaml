@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
         - name: validating-webhook
-          image: your-docker-repo/validating-webhook:latest
+          image: github.com/kriipke/opsdash.dev/validating-webhook:latest
           ports:
             - containerPort: 443

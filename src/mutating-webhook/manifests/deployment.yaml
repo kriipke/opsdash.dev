@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
         - name: mutating-webhook
-          image: your-docker-repo/mutating-webhook:latest
+          image: github.com/kriipke/opsdash.dev/mutating-webhook:latest
           ports:
             - containerPort: 443
