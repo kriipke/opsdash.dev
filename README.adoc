@@ -28,6 +28,7 @@ endif::[]
 :toc-placement!:
 :toc-title:
 :toc:
+:toclevels: 4
 
 toc::[]
 
@@ -48,7 +49,7 @@ spec:
   srcRepository:
     url: "https://github.com/example/minimal-repo.git"
     branch: "main"
-    # Reference an existing Kubernetes secret containing repo credentials.
+    # Use an existing Kubernetes secret for repository credentials.
     existingSecret: "minimal-repo-credentials"
   ciSystem: "github"
   ociBuild:
@@ -58,7 +59,7 @@ spec:
   ociRegistry:
     url: "registry.example.com"
     repository: "minimal/repo"
-    # Reference an existing Kubernetes secret containing registry credentials.
+    # Use an existing Kubernetes secret for registry credentials.
     existingSecret: "minimal-registry-credentials"
 ```
 
@@ -67,7 +68,6 @@ spec:
 For a minimal pipeline where both repository and registry credentials come from existing Kubernetes secrets, the application might output a GitHub Actions workflow like this:
 
 ```yaml
-# .github/workflows/minimal-pipeline.yml
 name: Minimal Pipeline
 
 on:
@@ -81,13 +81,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v2
         with:
+          # The repository URL/branch is taken from the CIPipeline spec.
           repository: example/minimal-repo
           ref: main
+
       - name: Build Docker Image
         run: |
+          echo "Building Docker image using Dockerfile"
           docker build -f Dockerfile -t registry.example.com/minimal/repo:latest .
+
       - name: Push Docker Image
         run: |
+          echo "Pushing Docker image to registry"
           docker push registry.example.com/minimal/repo:latest
 ```
 
@@ -120,23 +125,24 @@ spec:
   triggers:
     event: "push"
     branch: "develop"
-  linters:
-    - name: "eslint"
+  preBuildSteps:
+    - type: Linter
+      name: "eslint"
       configPath: ".eslintrc.json"
       globPatterns:
         - "src/**/*.js"
-  codeReviews:
-    - codeReviewerType: "human"
+    - type: CodeReview
+      codeReviewerType: "human"
       codeReviewer: "reviewer@example.com"
-  customSteps:
-    - command: "npm run build"
+    - type: CustomStep
+      command: "npm run audit"
       shell: "bash"
       containerImage: "node:14"
       successCriteria:
         statusCode: 0
         outputRegex: "Build succeeded"
-  secretScans:
-    - toolName: "trufflehog"
+    - type: SecretScan
+      toolName: "trufflehog"
       globPatterns:
         - "**/*.js"
       configPath: "trufflehog-config.yml"
@@ -165,86 +171,126 @@ spec:
 For a more complex pipeline (with linting, code review, a custom build step, secret scanning, and notifications) targeting Jenkins, the application might render a Declarative Pipeline (Jenkinsfile) as follows:
 
 ```groovy
-// Jenkinsfile for complex-pipeline-inline-secrets
 pipeline {
     agent any
 
-    // Triggering the build based on SCM polling (matching a push on the "develop" branch)
+    // Trigger configuration: here we simulate a push trigger on branch 'develop'
     triggers {
         pollSCM('H/5 * * * *')
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout Repository') {
             steps {
-                // Checkout from the "develop" branch of the repository
+                // Checkout from the repository using the provided URL and branch.
                 checkout([$class: 'GitSCM',
                           branches: [[name: 'develop']],
                           userRemoteConfigs: [[url: 'https://github.com/example/complex-repo.git']]
                 ])
             }
         }
-        stage('Lint') {
-            steps {
-                // Run ESLint using the provided configuration
-                sh 'eslint -c .eslintrc.json "src/**/*.js"'
-            }
-        }
-        stage('Code Review') {
-            steps {
-                // Simulate a code review step (e.g., notify a human reviewer)
-                echo "Code review by reviewer@example.com"
-            }
-        }
-        stage('Custom Build Step') {
-            steps {
-                // Execute a custom build step inside a container (using Node.js image)
-                container('node:14') {
-                    sh 'npm run build'
+
+        stage('Pre-Build Steps') {
+            parallel {
+                stage('Linter (Job #1)') {
+                    steps {
+                        // Job #1: Linter step from the transformed "linters" array.
+                        echo "Running ESLint as Job #1"
+                        // Execute ESLint with the provided configuration and glob patterns.
+                        sh 'eslint -c .eslintrc.json "src/**/*.js"'
+                    }
+                }
+                stage('Code Review (Job #2)') {
+                    steps {
+                        // Job #2: Code review step from the transformed "codeReviews" array.
+                        echo "Notifying reviewer@example.com for code review (Job #2)"
+                        // In a real pipeline, this might send a notification or require manual intervention.
+                    }
+                }
+                stage('Custom Build Step (Job #3)') {
+                    steps {
+                        // Job #3: Custom build step from the transformed "customSteps" array.
+                        echo "Executing custom build step: npm run build (Job #3)"
+                        // Running the build step inside a Node.js container.
+                        script {
+                            docker.image('node:14').inside {
+                                sh 'npm run build'
+                            }
+                        }
+                    }
+                }
+                stage('Secret Scan (Job #4)') {
+                    steps {
+                        // Job #4: Secret scanning step from the transformed "secretScans" array.
+                        echo "Performing secret scan using trufflehog (Job #4)"
+                        sh 'trufflehog --config trufflehog-config.yml .'
+                    }
                 }
             }
         }
-        stage('Secret Scan') {
-            steps {
-                // Run a secret scanning tool (e.g., trufflehog)
-                sh 'trufflehog --config trufflehog-config.yml .'
-            }
-        }
+
         stage('OCI Build') {
             steps {
-                // Build the Docker image from Dockerfile.complex in the "app" directory
+                echo "Building Docker image using Dockerfile.complex in the 'app/' directory"
+                // Change directory to 'app' and build the Docker image.
                 dir('app') {
-                    sh 'docker build -f ../Dockerfile.complex -t complex-repo:latest .'
+                    sh 'docker build -f Dockerfile.complex -t complex-repo:latest .'
                 }
             }
         }
+
         stage('OCI Registry Push') {
             steps {
-                // Tag and push the Docker image to the registry
+                echo "Tagging and pushing Docker image to registry"
+                // Tag the image and push it to the registry.
                 sh 'docker tag complex-repo:latest registry.example.com/complex/repo:latest'
                 sh 'docker push registry.example.com/complex/repo:latest'
             }
         }
-        stage('Notify') {
+
+        stage('Notification') {
             steps {
-                // Send a notification via webhook
-                sh 'curl -X POST -d "Build completed" https://hooks.example.com/notify'
+                echo "Sending build notification"
+                // Send a notification (for example, via a webhook).
+                sh 'curl -X POST -d "Build succeeded" https://hooks.example.com/notify'
             }
         }
     }
+
     post {
         failure {
-            // Send an email notification on failure
+            // In case of failure, send an email notification.
             mail to: 'ops@example.com',
                  subject: "Jenkins Build Failed: ${env.JOB_NAME}",
-                 body: "Please check the Jenkins logs for details."
+                 body: "Please check the Jenkins build logs for details."
         }
     }
 }
 ```
 
-This Jenkinsfile incorporates the various stages from the CIPipeline manifest: checking out from the specified repo/branch, running linting and code review steps, executing a custom build command, scanning for secrets, building the image from a custom Dockerfile, pushing to the registry, and sending a notification.
+===== Explanation
+Checkout Stage:
+The repository is checked out using the URL and branch specified in the CIPipeline manifest.
 
+Pre-Build Steps:
+A parallel block runs the pre-build steps. In this design, the webhook has already sorted the unified preBuildSteps into four distinct arrays. For simplicity, we illustrate them sequentially here (in parallel, you might run them concurrently if appropriate). Each step echoes its job number (as assigned by the webhook) and executes its respective command:
+
+Linter (Job #1): Runs ESLint.
+Code Review (Job #2): Simulates a code review (for instance, by sending a notification).
+Custom Build (Job #3): Executes a custom build command inside a Node.js container.
+Secret Scan (Job #4): Runs a secret scanning tool.
+OCI Build & Push:
+The image is built using a custom Dockerfile (located in the app/ directory) and then tagged and pushed to the specified container registry.
+
+Notification Stage:
+A final notification step sends a webhook call to indicate build success.
+
+Post Actions:
+If the build fails, an email notification is sent to the operations team.
+
+This Jenkinsfile provides an end-to-end example of how your transformed CIPipeline manifest might be rendered into a functional Jenkins pipeline. Adjust the commands and stages as needed to match your actual CI/CD environment and tooling conventions.
+
+Happy deploying!
 
 ---
 
@@ -266,6 +312,12 @@ spec:
     # Use an existing Kubernetes secret for repository credentials.
     existingSecret: "mixed-repo-credentials"
   ciSystem: "gitlab"
+  preBuildSteps:
+    - type: Linter
+      name: "eslint"
+      configPath: ".eslintrc.json"
+      globPatterns:
+        - "src/**/*.js"
   ociBuild:
     dockerfile: "Dockerfile"
     context: "."
@@ -274,7 +326,7 @@ spec:
   ociRegistry:
     url: "registry.example.com"
     repository: "mixed/repo"
-    # Use an inline externalSecret that references an existing secret for the registry credentials.
+    # Inline externalSecret that references an existing secret for registry credentials.
     externalSecret:
       vaultAddress: "https://vault.example.com"
       secretPath: "secret/data/mixed-registry-creds"
@@ -287,33 +339,34 @@ spec:
 When the repository credentials come from an existing secret and the registry credentials use an inline externalSecret (which itself references an existing secret), the application might render a GitLab CI pipeline (`.gitlab-ci.yml`) like this:
 
 ```yaml
-# .gitlab-ci.yml for mixed-credentials-pipeline
+# .gitlab-ci.yml for Mixed Credentials Pipeline
+
 stages:
-  - checkout
+  - prebuild
   - build
   - deploy
 
-variables:
-  CUSTOM_TAG: "v2.0.1"
+# Pre-Build stage: after mutation, the single preBuildSteps item appears in the "linters" array.
+prebuild:
+  stage: prebuild
+  script:
+    - echo "Job #1 (Linter): Running ESLint on source files"
+    - eslint -c .eslintrc.json "src/**/*.js"
 
-checkout_job:
-  stage: checkout
+build:
+  stage: build
   script:
     - echo "Cloning repository from https://github.com/example/mixed-repo.git (branch: main)"
     - git clone --branch main https://github.com/example/mixed-repo.git
-
-build_job:
-  stage: build
-  script:
     - echo "Building Docker image using Dockerfile"
-    - docker build -f Dockerfile -t mixed-repo:$CUSTOM_TAG .
-    - docker tag mixed-repo:$CUSTOM_TAG registry.example.com/mixed/repo:$CUSTOM_TAG
+    - docker build -f Dockerfile -t mixed-repo:latest .
+    - docker tag mixed-repo:latest registry.example.com/mixed/repo:latest
 
-deploy_job:
+deploy:
   stage: deploy
   script:
     - echo "Pushing Docker image to registry"
-    - docker push registry.example.com/mixed/repo:$CUSTOM_TAG
+    - docker push registry.example.com/mixed/repo:latest
 ```
 
 
@@ -344,27 +397,24 @@ spec:
   triggers:
     event: "pull_request"
     branch: "feature/*"
-  linters:
-    - name: "pylint"
+  preBuildSteps:
+    - type: Linter
+      name: "pylint"
       configPath: "pylintrc"
       globPatterns:
         - "src/**/*.py"
-    - name: "flake8"
-      configPath: ".flake8"
-      globPatterns:
-        - "src/**/*.py"
-  codeReviews:
-    - codeReviewerType: "llm"
+    - type: CodeReview
+      codeReviewerType: "llm"
       codeReviewer: "openai-gpt"
-  customSteps:
-    - command: "pytest --maxfail=1"
+    - type: CustomStep
+      command: "pytest --maxfail=1 --disable-warnings -q"
       shell: "bash"
       containerImage: "python:3.8"
       successCriteria:
         statusCode: 0
         outputRegex: "All tests passed"
-  secretScans:
-    - toolName: "detect-secrets"
+    - type: SecretScan
+      toolName: "detect-secrets"
       globPatterns:
         - "**/*.py"
       configPath: "detect-secrets-config.yml"
@@ -388,7 +438,8 @@ spec:
 For an advanced configuration that includes multiple linting stages, code review via an LLM, custom testing, secret scanning, a custom OCI build with a custom tag, and notifications, targeting Azure Pipelines the rendered output might look like this:
 
 ```yaml
-# azure-pipelines.yml for advanced-pipeline
+# azure-pipelines.yml for Advanced Pipeline
+
 trigger:
   branches:
     include:
@@ -399,42 +450,47 @@ pr:
       - 'feature/*'
 
 jobs:
-- job: AdvancedPipeline
-  displayName: 'Advanced Pipeline Job'
+- job: PreBuild
+  displayName: 'Pre-Build Steps'
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: |
+      echo "Job #1 (Linter): Running pylint on source files"
+      pylint --rcfile=pylintrc src/**/*.py
+    displayName: 'Linter (Job #1)'
+  - script: |
+      echo "Job #2 (Code Review): Notifying openai-gpt for review"
+      # In a real pipeline, this step might trigger a notification or manual intervention.
+    displayName: 'Code Review (Job #2)'
+  - script: |
+      echo "Job #3 (Custom Step): Running tests with pytest"
+      pytest --maxfail=1 --disable-warnings -q
+    displayName: 'Custom Step (Job #3)'
+  - script: |
+      echo "Job #4 (Secret Scan): Running detect-secrets scan"
+      detect-secrets scan --config-file detect-secrets-config.yml
+    displayName: 'Secret Scan (Job #4)'
+
+- job: BuildAndDeploy
+  displayName: 'OCI Build and Registry Push'
+  dependsOn: PreBuild
   pool:
     vmImage: 'ubuntu-latest'
   steps:
   - checkout: self
-    persistCredentials: true
-    clean: true
   - script: |
-      echo "Running linters: pylint and flake8"
-      pylint --rcfile=pylintrc src/**/*.py
-      flake8 --config=.flake8 src/**/*.py
-    displayName: 'Lint Code'
-  - script: |
-      echo "Performing code review using LLM (openai-gpt)"
-    displayName: 'Code Review'
-  - script: |
-      echo "Executing custom tests with pytest"
-      pytest --maxfail=1
-    displayName: 'Custom Step: Test'
-  - script: |
-      echo "Running secret scan with detect-secrets"
-      detect-secrets scan --config-file detect-secrets-config.yml
-    displayName: 'Secret Scan'
-  - script: |
-      echo "Building Docker image from Dockerfile.advanced in build/ directory"
+      echo "Building Docker image using Dockerfile.advanced in the 'build/' directory"
       cd build
       docker build -f Dockerfile.advanced -t advanced-repo:$(Build.BuildId) .
     displayName: 'OCI Build'
   - script: |
-      echo "Pushing Docker image to registry.advanced.com/advanced/repo"
+      echo "Tagging and pushing Docker image"
       docker tag advanced-repo:$(Build.BuildId) registry.advanced.com/advanced/repo:$(Build.BuildId)
       docker push registry.advanced.com/advanced/repo:$(Build.BuildId)
     displayName: 'OCI Registry Push'
   - script: |
-      echo "Sending notifications"
+      echo "Sending notification"
       curl -X POST -d "Build completed" https://hooks.advanced.com/notify
     displayName: 'Notify'
 ```
