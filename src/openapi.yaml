@@ -114,13 +114,13 @@ components:
     CIPipeline:
       type: object
       x-kubernetes-group-version-kind:
-        - group: ci.example.com
+        - group: opsdash.dev
           version: v1alpha1
           kind: CIPipeline
       properties:
         apiVersion:
           type: string
-          example: "ci.example.com/v1alpha1"
+          example: "opsdash.dev/v1alpha1"
         kind:
           type: string
           example: "CIPipeline"
