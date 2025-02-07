@@ -1,0 +1,347 @@
+= Example Manifests for CIPipeline CRDs
+:toc:
+:icons: font
+
+This document presents several example manifests for three variations of the `CIPipeline` Custom Resource Definition (CRD). This CRD is designed to define the desired state of a CI pipeline for a containerized web service running on Kubernetes. It is highly extensible, supports any container build process (always producing a deployable container image), and allows pushing that artifact to any registry (e.g., Harbor, ECR, GitHub Container Registry, etc.).
+
+The examples below are organized into three sections:
+* **CRD 1** – Basic pipeline with notifications.
+* **CRD 2** – Pipeline with artifacts and environment configurations.
+* **CRD 3** – Extensible pipeline with CI/CD tool integration.
+
+Each section includes multiple variations to illustrate different usage scenarios and features.
+
+== CRD 1: Basic CIPipeline with Notifications
+
+This variant focuses on a pipeline that includes source configuration, trigger mechanisms, sequential pipeline stages, and notification settings.
+
+=== Variation 1: Webhook-Triggered Pipeline with Build and Test Stages
+
+[source,yaml]
+----
+apiVersion: ci.example.com/v1alpha1             // <1>
+kind: CIPipeline                                // <2>
+metadata:
+  name: webapp-pipeline-webhook                // <3>
+spec:
+  source:                                      // <4>
+    repoURI: "https://github.com/example/webapp.git"  // <5>
+    branch: "main"                             // <6>
+    credentials:                               // <7>
+      secretName: "repo-creds"                 // <8>
+      secretKey: "token"                       // <9>
+  triggers:                                    // <10>
+    type: "webhook"                           // <11>
+    webhook:                                  // <12>
+      endpoint: "http://ci-trigger.example.com/webhook" // <13>
+      secret: "webhooksecret"                  // <14>
+  stages:                                      // <15>
+    - name: "build"                            // <16>
+      type: "build"                            // <17>
+      buildSpec:                               // <18>
+        dockerfile: "Dockerfile"               // <19>
+        buildContext: "."                      // <20>
+      jobSpec:                                 // <21>
+        image: "docker:latest"                 // <22>
+        command: ["docker", "build", "-t", "example/webapp:latest"]  // <23>
+        args: ["."]                           // <24>
+    - name: "test"                             // <25>
+      type: "test"                             // <26>
+      jobSpec:                                 // <27>
+        image: "node:14"                       // <28>
+        command: ["npm", "test"]               // <29>
+  artifacts:                                   // <30>
+    type: "container-image"                     // <31>
+    destination:                                // <32>
+      registry: "registry.example.com"         // <33>
+      repository: "example/webapp"              // <34>
+      tag: "latest"                             // <35>
+  notifications:                               // <36>
+    - type: "slack"                           // <37>
+      slack:                                  // <38>
+        webhookURL: "https://hooks.slack.com/services/XXXX/YYYY/ZZZZ" // <39>
+----
+<1> API version for the CIPipeline CRD.
+<2> Resource kind.
+<3> Name of this pipeline instance.
+<4> Source configuration block.
+<5> URI of the Git repository.
+<6> Branch to build.
+<7>-<9> Optional credentials for private repositories.
+<10> Trigger configuration block.
+<11> Trigger type set to webhook.
+<12>-<14> Webhook settings including endpoint and secret.
+<15> List of pipeline stages.
+<16>-<17> Build stage definition.
+<18>-<20> Build specification (Dockerfile location and build context).
+<21>-<24> Job specification to execute the build stage.
+<25>-<26> Test stage definition.
+<27>-<29> Job specification for the test stage.
+<30>-<35> Artifacts configuration ensuring a container image is produced and pushed.
+<36>-<39> Notification configuration using Slack.
+
+=== Variation 2: Scheduled Pipeline with Deploy Stage and Email Notification
+
+[source,yaml]
+----
+apiVersion: ci.example.com/v1alpha1             // <1>
+kind: CIPipeline                                // <2>
+metadata:
+  name: webapp-pipeline-scheduled              // <3>
+spec:
+  source:                                      // <4>
+    repoURI: "https://github.com/example/webapp.git"  // <5>
+    branch: "develop"                          // <6>
+  triggers:                                    // <7>
+    type: "schedule"                          // <8>
+    schedule: "0 0 * * *"                      // <9>
+  stages:                                      // <10>
+    - name: "build"                            // <11>
+      type: "build"                            // <12>
+      buildSpec:                               // <13>
+        dockerfile: "Dockerfile"               // <14>
+        buildContext: "./app"                  // <15>
+      jobSpec:                                 // <16>
+        image: "maven:3.6-jdk-11"              // <17>
+        command: ["mvn", "clean", "package"]   // <18>
+    - name: "deploy"                           // <19>
+      type: "deploy"                           // <20>
+      jobSpec:                                 // <21>
+        image: "kubectl:latest"                // <22>
+        command: ["kubectl", "apply", "-f", "deployment.yaml"]  // <23>
+  artifacts:                                   // <24>
+    type: "container-image"                     // <25>
+    destination:                                // <26>
+      registry: "ecr.aws-region.amazonaws.com"   // <27>
+      repository: "example/webapp"              // <28>
+      tag: "v1.0.0"                             // <29>
+  notifications:                               // <30>
+    - type: "email"                           // <31>
+      email:                                  // <32>
+        addresses: ["devops@example.com"]      // <33>
+----
+<1>-<3> Standard resource metadata.
+<4>-<6> Source configuration details.
+<7>-<9> Trigger configuration using a cron expression.
+<10> Pipeline stages block.
+<11>-<12> Build stage definition with Maven.
+<13>-<15> BuildSpec specifying the Dockerfile and build context.
+<16>-<18> Job specification for the build stage.
+<19>-<20> Deploy stage definition.
+<21>-<23> Job specification for the deploy stage.
+<24>-<29> Artifacts configuration pushing the container image to ECR.
+<30>-<33> Notification settings using email.
+
+== CRD 2: CIPipeline with Artifacts and Environments
+
+This variant extends the basic pipeline with detailed artifact management and environment configuration. It ensures that the deployable container image can be pushed to any registry and includes settings for environment variables, ConfigMaps, and Secrets.
+
+=== Variation 1: Pipeline with Environment Variables and Artifact Push to Harbor
+
+[source,yaml]
+----
+apiVersion: ci.example.com/v1alpha1             // <1>
+kind: CIPipeline                                // <2>
+metadata:
+  name: webapp-pipeline-artifacts-env          // <3>
+spec:
+  source:                                      // <4>
+    repoURI: "https://github.com/example/webapp.git"  // <5>
+    branch: "main"                             // <6>
+    credentials:                               // <7>
+      secretName: "repo-creds"                 // <8>
+      secretKey: "token"                       // <9>
+  triggers:                                    // <10>
+    type: "manual"                            // <11>
+  stages:                                      // <12>
+    - name: "build"                            // <13>
+      type: "build"                            // <14>
+      buildSpec:                               // <15>
+        dockerfile: "Dockerfile"               // <16>
+        buildContext: "."                      // <17>
+      jobSpec:                                 // <18>
+        image: "docker:latest"                 // <19>
+        command: ["docker", "build", "-t", "example/webapp:latest"]  // <20>
+        args: ["."]                           // <21>
+  artifacts:                                   // <22>
+    type: "container-image"                     // <23>
+    destination:                                // <24>
+      registry: "harbor.example.com"           // <25>
+      repository: "example/webapp"              // <26>
+      tag: "latest"                             // <27>
+  environments:                                // <28>
+    variables:                                 // <29>
+      - name: "ENV"                           // <30>
+        value: "production"                   // <31>
+    configMapRef:                              // <32>
+      name: "webapp-config"                     // <33>
+    secretRef:                                 // <34>
+      name: "webapp-secrets"                    // <35>
+----
+<1>-<3> Standard resource fields.
+<4>-<6> Source repository configuration.
+<7>-<9> Credentials for accessing the repository.
+<10>-<11> Manual trigger configuration.
+<12> Pipeline stages block.
+<13>-<14> Build stage definition.
+<15>-<17> BuildSpec with Dockerfile and build context.
+<18>-<21> Job specification for executing the build stage.
+<22>-<27> Artifacts configuration pushing a container image to Harbor.
+<28>-<35> Environment configuration including variables, a ConfigMap, and a Secret.
+
+=== Variation 2: Scheduled Pipeline with External Artifact Storage on GitHub
+
+[source,yaml]
+----
+apiVersion: ci.example.com/v1alpha1             // <1>
+kind: CIPipeline                                // <2>
+metadata:
+  name: webapp-pipeline-external-artifact       // <3>
+spec:
+  source:                                      // <4>
+    repoURI: "https://github.com/example/webapp.git"  // <5>
+    branch: "release"                          // <6>
+  triggers:                                    // <7>
+    type: "schedule"                          // <8>
+    schedule: "30 2 * * *"                     // <9>
+  stages:                                      // <10>
+    - name: "test"                             // <11>
+      type: "test"                             // <12>
+      jobSpec:                                 // <13>
+        image: "python:3.8"                    // <14>
+        command: ["pytest"]                    // <15>
+  artifacts:                                   // <16>
+    type: "container-image"                     // <17>
+    destination:                                // <18>
+      registry: "github.com"                    // <19>
+      repository: "example/webapp"              // <20>
+      tag: "v2.0.0"                             // <21>
+  environments:                                // <22>
+    variables:                                 // <23>
+      - name: "DEBUG"                         // <24>
+        value: "false"                        // <25>
+----
+<1>-<3> Standard metadata.
+<4>-<6> Source configuration details.
+<7>-<9> Trigger configuration with a cron expression.
+<10> Pipeline stages block.
+<11>-<12> Test stage definition.
+<13>-<15> Job specification for the test stage.
+<16>-<21> Artifacts configuration pushing the container image to GitHub.
+<22>-<25> Environment configuration with a DEBUG variable.
+
+== CRD 3: Extensible CIPipeline with CI/CD Tool Integration
+
+This variant is designed for extensibility, allowing integration with various CI/CD tools (such as Tekton and Jenkins) through custom configuration fields. It supports tool-specific settings while maintaining a common pipeline structure.
+
+=== Variation 1: Pipeline Using Tekton for Build and Deploy
+
+[source,yaml]
+----
+apiVersion: ci.example.com/v1alpha1             // <1>
+kind: CIPipeline                                // <2>
+metadata:
+  name: webapp-pipeline-tekton                 // <3>
+spec:
+  source:                                      // <4>
+    repoURI: "https://github.com/example/webapp.git"  // <5>
+    branch: "main"                             // <6>
+  triggers:                                    // <7>
+    type: "webhook"                           // <8>
+    webhook:                                  // <9>
+      endpoint: "http://tekton-trigger.example.com/webhook" // <10>
+      secret: "tektonsecret"                   // <11>
+  stages:                                      // <12>
+    - name: "build"                            // <13>
+      type: "build"                            // <14>
+      jobSpec:                                 // <15>
+        image: "tekton/build:latest"           // <16>
+        command: ["build-task"]                // <17>
+      customConfig:                            // <18>
+        task: "build-webapp"                   // <19>
+    - name: "deploy"                           // <20>
+      type: "deploy"                           // <21>
+      jobSpec:                                 // <22>
+        image: "tekton/deploy:latest"          // <23>
+        command: ["deploy-task"]               // <24>
+      customConfig:                            // <25>
+        task: "deploy-webapp"                  // <26>
+  artifacts:                                   // <27>
+    type: "container-image"                     // <28>
+    destination:                                // <29>
+      registry: "registry.example.com"         // <30>
+      repository: "example/webapp"              // <31>
+      tag: "latest"                             // <32>
+  notifications:                               // <33>
+    - type: "slack"                           // <34>
+      slack:                                  // <35>
+        webhookURL: "https://hooks.slack.com/services/AAAA/BBBB/CCCC" // <36>
+----
+<1>-<3> Standard resource metadata.
+<4>-<6> Source configuration.
+<7>-<11> Webhook trigger configuration tailored for Tekton.
+<12> Pipeline stages block.
+<13>-<14> Build stage definition using Tekton.
+<15>-<17> Job specification for the build stage.
+<18>-<19> Custom configuration for Tekton build task.
+<20>-<21> Deploy stage definition using Tekton.
+<22>-<24> Job specification for the deploy stage.
+<25>-<26> Custom configuration for Tekton deploy task.
+<27>-<32> Artifacts configuration ensuring a container image is produced and pushed.
+<33>-<36> Notification configuration using Slack.
+
+=== Variation 2: Pipeline Using Jenkins for Testing with Custom Configuration
+
+[source,yaml]
+----
+apiVersion: ci.example.com/v1alpha1             // <1>
+kind: CIPipeline                                // <2>
+metadata:
+  name: webapp-pipeline-jenkins-test           // <3>
+spec:
+  source:                                      // <4>
+    repoURI: "https://github.com/example/webapp.git"  // <5>
+    branch: "feature/ci-enhancements"          // <6>
+  triggers:                                    // <7>
+    type: "manual"                            // <8>
+  stages:                                      // <9>
+    - name: "test"                             // <10>
+      type: "test"                             // <11>
+      jobSpec:                                 // <12>
+        image: "jenkins/inbound-agent:latest"   // <13>
+        command: ["sh", "-c", "run-tests.sh"]   // <14>
+      customConfig:                            // <15>
+        jobName: "Webapp-Test-Job"              // <16>
+        parameters:                            // <17>
+          - key: "ENV"                         // <18>
+            value: "testing"                   // <19>
+  artifacts:                                   // <20>
+    type: "container-image"                     // <21>
+    destination:                                // <22>
+      registry: "docker.io"                     // <23>
+      repository: "example/webapp"              // <24>
+      tag: "test"                               // <25>
+  notifications:                               // <26>
+    - type: "email"                           // <27>
+      email:                                  // <28>
+        addresses: ["ci-team@example.com"]      // <29>
+----
+<1>-<3> Standard resource definition.
+<4>-<6> Source configuration details.
+<7>-<8> Trigger configuration set to manual.
+<9> Pipeline stages block.
+<10>-<11> Test stage definition.
+<12>-<14> Job specification for the test stage.
+<15>-<19> Custom Jenkins configuration with job name and parameters.
+<20>-<25> Artifacts configuration pushing the container image to Docker Hub.
+<26>-<29> Notification configuration using email.
+
+== Summary
+
+This document provided multiple example manifests for three variations of the `CIPipeline` CRD:
+
+* **CRD 1** – Basic pipelines with webhook or schedule triggers and integrated notifications.
+* **CRD 2** – Pipelines that incorporate detailed artifact management and environment configurations.
+* **CRD 3** – Extensible pipelines that support integration with specific CI/CD tools (such as Tekton and Jenkins) through custom configuration fields.
+
+Each manifest illustrates how the CRD can be tailored to support different CI/CD workflows while leveraging Kubernetes-native resources to ensure seamless integration and scalability.
