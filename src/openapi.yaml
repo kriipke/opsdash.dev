@@ -158,7 +158,10 @@ components:
                   - $ref: "#/components/schemas/SecretScan"
             ociBuild:
               type: object
-              description: "Settings for building the container image."
+              description: >
+                Settings for building the container image.
+                Note: If taggingStrategy is 'custom', then customTag should be provided.
+                This conditional requirement must be enforced by a validating admission webhook.
               properties:
                 dockerfile:
                   type: string
@@ -172,20 +175,12 @@ components:
                   description: "Strategy for tagging the built image."
                 customTag:
                   type: string
-                  description: "Custom tag value (if taggingStrategy is 'custom')."
+                  description: "Custom tag value. Should be provided when taggingStrategy is 'custom'."
               required:
                 - dockerfile
                 - context
                 - taggingStrategy
-              oneOf:
-                - properties:
-                    taggingStrategy:
-                      const: "custom"
-                  required:
-                    - customTag
-                - properties:
-                    taggingStrategy:
-                      enum: ["git-commit", "semver"]
+              additionalProperties: false
             ociRegistry:
               type: object
               description: "Container registry configuration."
@@ -228,4 +223,3 @@ components:
             - ociRegistry
           additionalProperties: false
       additionalProperties: false
-
