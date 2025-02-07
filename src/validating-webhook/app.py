@@ -5,26 +5,36 @@ app = Flask(__name__)
 @app.route('/validate', methods=['POST'])
 def validate():
     admission_review = request.get_json()
-    # Extract the UID from the incoming AdmissionReview request.
     uid = admission_review.get("request", {}).get("uid")
     
-    # Default allow is true.
     allowed = True
-    message = ""
+    messages = []
 
-    # Get the object under review.
     obj = admission_review.get("request", {}).get("object", {})
-
-    # Navigate into the spec to locate ociBuild.
     spec = obj.get("spec", {})
-    oci_build = spec.get("ociBuild", {})
 
-    # If taggingStrategy is "custom", enforce that customTag is provided.
+    # Validate ociBuild: if taggingStrategy is "custom", customTag must be provided.
+    oci_build = spec.get("ociBuild", {})
     if oci_build.get("taggingStrategy") == "custom":
-        custom_tag = oci_build.get("customTag")
-        if not custom_tag:
+        if not oci_build.get("customTag"):
             allowed = False
-            message = "Validation failed: When taggingStrategy is 'custom', customTag must be provided in ociBuild."
+            messages.append("Validation failed: When taggingStrategy is 'custom', customTag must be provided in ociBuild.")
+
+    # Validate srcRepository: exactly one of externalSecret or existingSecret must be provided.
+    src_repo = spec.get("srcRepository", {})
+    repo_external = src_repo.get("externalSecret")
+    repo_existing = src_repo.get("existingSecret")
+    if (repo_external and repo_existing) or (not repo_external and not repo_existing):
+        allowed = False
+        messages.append("Validation failed: In srcRepository, exactly one of externalSecret or existingSecret must be provided.")
+
+    # Validate ociRegistry: exactly one of externalSecret or existingSecret must be provided.
+    oci_registry = spec.get("ociRegistry", {})
+    reg_external = oci_registry.get("externalSecret")
+    reg_existing = oci_registry.get("existingSecret")
+    if (reg_external and reg_existing) or (not reg_external and not reg_existing):
+        allowed = False
+        messages.append("Validation failed: In ociRegistry, exactly one of externalSecret or existingSecret must be provided.")
 
     # Build the AdmissionReview response.
     response = {
@@ -36,10 +46,9 @@ def validate():
         }
     }
     
-    # If the request is denied, include a status message.
     if not allowed:
         response["response"]["status"] = {
-            "message": message,
+            "message": "; ".join(messages),
             "code": 400
         }
     
@@ -47,5 +56,4 @@ def validate():
 
 if __name__ == '__main__':
     # In production, serve over TLS with valid certificates.
-    # Replace 'server.crt' and 'server.key' with your certificate and key files.
     app.run(host="0.0.0.0", port=443, ssl_context=('server.crt', 'server.key'))

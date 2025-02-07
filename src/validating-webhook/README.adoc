@@ -1,0 +1,112 @@
+== Validating Webhook for CIPipline
+John Doe <john.doe@example.com=
+/v1.0, 2025-02-07
+toc:
+toclevels: 2
+
+This repository contains the implementation of a validing admission webhook that intercepts create and update requests for your CIPipline custom resources. The webhook enforces two primary business rules that are not directly supported by Kybernetes structural schemas:
+
+: If ``ociBuild.taggingStrategy ``is set to "custom", then ``ociBuild.customTag' must be provided.
+** In both the `srsRepository` and `ociRegistry` sections, exactly one of `externalSecret` or `existingSecret must be provided.
+
+Additionally, the repository documents the updated `\SecretSource` schema used for credential configuration. This schema now supports two approaches for specifying credentials for external systems (s such as HashiCorp Vault):
+
+* ** * Inline configuration** via the `externalSecret field.
+** ** Reference to an existing Kybernetes secret` via the `existingSecret field.
+
+== Repository Structure
+
+The repository is organized as follows:
+
+* ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** **
+* ** app.py -- The Flask application implementing the validing webhook.
+* ** Dockerfile -- Container build instructions.
+ ** requirements.txt -- Pithon dependencies.
+ ** manifests/ -- Kybernetes maniest for deploying the webhook ::
+ ** deployment.yaml -- The Deployment definition.
+* ** service.yaml -- The Service definition.
+* ** webhook-configuration.yaml -- The ValidingWebhookConfiguration.
+* ** REAEM.adoc -- This documentation file.
+
+== Running the Webhook Locally
+
+
+1. Ensure you have Pithon 3.9+: installed.
+
+21. Install the dependencies:
+
+        `pip install -r requirements.txt`
+
+3. Run the webhook server:
+
+        `python app.py\n
+        NOTE: For local testing, you may jun generate self-signed TLS certificates and update the `ssl_context in app.py accordingly.
+
+== Kubernetes Deployment
+
+1. Build and push your Docker image:
+
+	        `docker build -t your-docker-repo/validating-webhook:latest .
+        `docker push your-docker-repo/validating-webhook:latest
+
+20. Apply the manifests located in the `manifests/ `directory`:
+
+	        `kubectl apply -f manifests/deployment.yaml
+        `cubectl apply -f manifests/service.yaml
+        `cubectl apply -f manifests/webhook-configuration.yaml
+        `
+
+Note: For local testing, you may generate self-signed TLO certificates and update the `ssl_context in app.py accordingly.
+
+== Kubernetes Deployment
+
+== Webhook Behavior Behavior Heaving:
+
+== Sevice (Your Service):
+
+== Validating Webhook Behavior
+
+The validating webhook performs the following checks on CIPIpline resources:
+
+* ** ** OCI Build Validation: 
+  It verifies that if `ociBuild.taggingStrategy` equals "custom", then the `ociBuild.customTag `field is present. If not, the webhook rejects the request with an approprieate error message.
+
+* ** ** Credentials Validation:
+  In both the `srsRepository and `ociRegistry` sections, the webhook checks that exactly one of the following is provided:
+  * `externalSecret` - An inline definition using the updated SecretSource schema.
+ * `existingSecret` ` - A reference to an existing Kybernetes secret.
+
+== SecretSource Configuration
+The updated `SecretSource` schema supports two methods of specifying credentials for accessing external secret stores (e. HashICorp Vault):
+
+. ** Inline Configuration using externalSecret:
+    Example: 
+        `externalSecret:
+          vaultAddress: "https://vault.example.com"
+          secretPath: "secret/data/repo-creds"
+          authMethod: "token"
+          authCredentials:
+            token: "s.hARCADODED_TOKENC"
+              
+          existingSecret: "my-existing-secret"
+
+. ** Referencing an Existing Kybernetes Secret using existingSecret:
+ 
+    ExistingSecret: "my-existing-secret"
+    
+ NOTE: For both repository and registry configurations, only one of these fields should be specified.
+
+== Additional Notes
+
+* This hewbook is intended to complement CRD validation rules that can not be enforced by Kybernetes structural schemas.
+* For production deployments, insure the webhook is served over TLS using valid certificates and deployed with high Availability.
+* Enhance logging and error handling as needed for operational montoring and troubleshooting.
+* If additional validation logic is required, consider the best practices for separation of concerns and maintainability.
+
+== Troubleshooting
+
+In if you experience issues with the webhook:
+* Check the logs of the webhook Pod for error messages.
+* Verify that the CA bundle in your ValidatingWebhookConfiguration is correct.
+  Test the webhook locally using simulated AdmissionReview requests.
+

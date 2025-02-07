@@ -26,7 +26,7 @@ spec:
             schemas:
               SecretSource:
                 type: object
-                description: "Configuration for sourcing credentials from HashiCorp Vault."
+                description: "Configuration for sourcing credentials from HashiCorp Vault. Either inline credentials (via authCredentials) or an existing Kubernetes secret (existingSecret) should be provided."
                 properties:
                   vaultAddress:
                     type: string
@@ -55,8 +55,11 @@ spec:
                         type: string
                         description: "JWT for Kubernetes authentication."
                     additionalProperties: false
+                  existingSecret:
+                    type: string
+                    description: "Name of an existing Kubernetes secret containing the required credential (e.g. secretId for AppRole or jwt for Kubernetes). Only one of authCredentials or existingSecret should be provided."
                 additionalProperties: false
-                
+
               CodeReview:
                 type: object
                 description: "Configuration for code review processes."
@@ -146,8 +149,11 @@ spec:
                   branch:
                     type: string
                     description: "Branch to check out."
-                  credentialsSecret:
+                  externalSecret:
                     $ref: "#/components/schemas/SecretSource"
+                  existingSecret:
+                    type: string
+                    description: "Name of an existing Kubernetes secret containing credentials. Only one of externalSecret or existingSecret must be provided."
                 additionalProperties: false
 
               CIPipeline:
@@ -241,8 +247,11 @@ spec:
                           repository:
                             type: string
                             description: "Repository name in the registry."
-                          credentialsSecret:
+                          externalSecret:
                             $ref: "#/components/schemas/SecretSource"
+                          existingSecret:
+                            type: string
+                            description: "Name of an existing Kubernetes secret containing credentials. Only one of externalSecret or existingSecret must be provided."
                         additionalProperties: false
                       notifications:
                         type: object
