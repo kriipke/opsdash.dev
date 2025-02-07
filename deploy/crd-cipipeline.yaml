@@ -24,7 +24,7 @@ spec:
             version: 1.0.0
           components:
             schemas:
-              secretSource:
+              SecretSource:
                 type: object
                 description: "Configuration for sourcing credentials from HashiCorp Vault."
                 properties:
@@ -147,7 +147,7 @@ spec:
                     type: string
                     description: "Branch to check out."
                   credentialsSecret:
-                    $ref: "#/components/schemas/secretSource"
+                    $ref: "#/components/schemas/SecretSource"
                 additionalProperties: false
 
               CIPipeline:
@@ -242,7 +242,7 @@ spec:
                             type: string
                             description: "Repository name in the registry."
                           credentialsSecret:
-                            $ref: "#/components/schemas/secretSource"
+                            $ref: "#/components/schemas/SecretSource"
                         additionalProperties: false
                       notifications:
                         type: object
