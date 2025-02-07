@@ -55,7 +55,7 @@
                 <option value="kubernetes">Kubernetes</option>
               </select>
             </div>
-            <!-- Auth credentials (for simplicity, only token field shown) -->
+            <!-- For simplicity, only the token field is shown -->
             <div class="form-group" id="repoAuthCredentials">
               <label for="repoToken">Token</label>
               <input type="text" class="form-control" id="repoToken" placeholder="Token for Vault authentication">
@@ -99,7 +99,7 @@
         </form>
       </div>
       
-      <!-- Page 3: Pre-Build Steps -->
+      <!-- Page 3: Pre‑Build Steps -->
       <div id="page3" class="wizard-page">
         <h2>Pre‑Build Steps</h2>
         <form id="form-page3">
@@ -245,7 +245,7 @@
       
       <!-- Page 7: Review & Generate -->
       <div id="page7" class="wizard-page">
-        <h2>Review Your Inputs</h2>
+        <h2>Review &amp; Generate</h2>
         <div id="reviewSummary">
           <!-- Summary will be populated dynamically -->
         </div>
@@ -353,18 +353,85 @@
         $('#preBuildStepsContainer').append(stepHtml);
       });
       
-      // Generate review summary (for demo purposes)
+      // Generate review summary and JSON manifest
       $('#generateManifestBtn').click(function() {
-        let summaryHtml = '<h3>Review Summary</h3>';
-        summaryHtml += `<p><strong>Repository URL:</strong> ${$('#repoUrl').val()}</p>`;
-        summaryHtml += `<p><strong>Branch:</strong> ${$('#branch').val()}</p>`;
-        summaryHtml += `<p><strong>CI System:</strong> ${$('#ciSystem').val()}</p>`;
-        // You can extend this to include other form values...
-        $('#reviewSummary').html(summaryHtml);
-        alert("Manifest generation logic would process these inputs now.");
+        // Gather all data from pages
+        let manifestData = {};
+        
+        // Page 1: Repository
+        manifestData.srcRepository = {
+          url: $('#repoUrl').val(),
+          branch: $('#branch').val()
+        };
+        if ($('input[name="repoCredType"]:checked').val() === 'inline') {
+          manifestData.srcRepository.externalSecret = {
+            vaultAddress: $('#repoVaultAddress').val(),
+            secretPath: $('#repoSecretPath').val(),
+            authMethod: $('#repoAuthMethod').val(),
+            token: $('#repoToken').val()
+          };
+        } else {
+          manifestData.srcRepository.existingSecret = $('#repoExistingSecret').val();
+        }
+        
+        // Page 2: CI System & Triggers
+        manifestData.ciSystem = $('#ciSystem').val();
+        manifestData.triggers = {
+          event: $('#triggerEvent').val(),
+          branch: $('#triggerBranch').val()
+        };
+        
+        // Page 3: Pre-Build Steps (collect all steps)
+        manifestData.preBuildSteps = [];
+        $('#preBuildStepsContainer .prebuild-step').each(function(index) {
+          let stepType = $(this).find('.stepType').val();
+          let stepData = { type: stepType };
+          if (stepType === 'Linter') {
+            stepData.name = $(this).find('[id^="linterTool_"]').val();
+            stepData.configPath = $(this).find('[id^="linterConfigPath_"]').val();
+            stepData.globPatterns = $(this).find('[id^="linterGlobPatterns_"]').val();
+          }
+          // Additional types (CodeReview, CustomStep, SecretScan) can be handled similarly.
+          // For this mockup, we only implement Linter fields.
+          manifestData.preBuildSteps.push(stepData);
+        });
+        
+        // Page 4: OCI Build
+        manifestData.ociBuild = {
+          dockerfile: $('#dockerfilePath').val(),
+          context: $('#contextDirectory').val(),
+          taggingStrategy: $('#taggingStrategy').val()
+        };
+        if ($('#taggingStrategy').val() === 'custom') {
+          manifestData.ociBuild.customTag = $('#customTag').val();
+        }
+        
+        // Page 5: OCI Registry
+        manifestData.ociRegistry = {
+          url: $('#registryURL').val(),
+          repository: $('#registryRepoName').val()
+        };
+        if ($('input[name="registryCredType"]:checked').val() === 'inline') {
+          manifestData.ociRegistry.externalSecret = {
+            vaultAddress: $('#registryVaultAddress').val(),
+            secretPath: $('#registrySecretPath').val(),
+            authMethod: $('#registryAuthMethod').val(),
+            token: $('#registryToken').val()
+          };
+        } else {
+          manifestData.ociRegistry.existingSecret = $('#registryExistingSecret').val();
+        }
+        
+        // Page 6: Notifications
+        manifestData.notifications = {
+          webhook: $('#webhookURL').val(),
+          email: $('#notificationEmail').val()
+        };
+        
+        // Display JSON object in a pop-up
+        alert("Generated CIPipeline Manifest:\n\n" + JSON.stringify(manifestData, null, 2));
       });
     });
   </script>
 </body>
 </html>
-
