@@ -1,0 +1,372 @@
+```Task: Design a Kubernetes Custom Resource Definition (CRD) for a CI Pipeline.  
+
+Context:  
+You are a Kubernetes expert defining a CRD that models a Continuous Integration (CI) pipeline for containerized applications. This CRD should:  
+- Ensure that an image is only built and pushed after passing all configured security, code review, and testing steps.  
+- Not handle deployment (handled separately in a CD pipeline).  
+
+Specific Requirements:  
+1. **Core CI Functionality**  
+   - Allow users to specify the CI system (Jenkins, GitHub Actions, GitLab CI, etc.).  
+   - Support optional pre-build steps:  
+     - Code review policies  
+     - Secrets detection (e.g., Gitleaks)  
+     - Static security scanning (SAST)  
+   - Provide the ability to define custom execution steps (shell commands + container runtime).  
+
+2. **CRD Structure & Kubernetes Compatibility**  
+   - Define necessary fields and their roles within the CRD.  
+   - Ensure compatibility with Kubernetes-native tooling (Pods, ConfigMaps, Secrets).  
+   - Support workflows like event-based triggers, pipeline stages, and notifications.  
+
+3. **Customization & Security**  
+   - Enable configurable tagging strategies (Git commit hash, SemVer enforcement).  
+   - Allow registry credential retrieval from an external secrets manager (e.g., external-secrets-operator).  
+
+4. **Deliverables**  
+   - CRD Specification with a clear field structure and explanations.  
+   - Example CR manifests demonstrating:  
+     - A basic CI pipeline  
+     - A complex pipeline with advanced security checks and custom automation  
+
+Key Considerations:  
+- The CRD must be flexible and extensible to accommodate various CI workflows.  
+- Adhere to Kubernetes best practices for maintainability and security.  
+- Clearly document any assumptions, limitations, and expected behaviors.  
+```
+
+Below is one approach to designing a Kubernetes CRD that models a CI pipeline dedicated solely to building and pushing container images—**only after** all the prescribed security, code review, and testing steps pass. In this design, deployment is intentionally left out, as that responsibility is handled by a separate CD pipeline. We’ve structured the CRD to be flexible, Kubernetes-native, and extensible for different CI systems and workflows.
+
+---
+
+## 1. CRD Specification: Field Structure & Explanations
+
+The following YAML defines the CRD for a CI pipeline. Key sections include:
+
+- **`ciSystem`**: Specifies the CI engine (e.g., Jenkins, GitHub Actions).
+- **`triggers`**: Configures event-based pipeline initiation (such as on pushes or pull requests).
+- **`preBuildSteps`**: Contains optional validations before the build. These include:
+  - **Code Review**: With an optional list of reviewers.
+  - **Secrets Detection**: For scanning secrets using tools like Gitleaks.
+  - **Static Analysis (SAST)**: For security scanning using your tool of choice.
+- **`stages`**: An ordered list of pipeline stages where each stage is composed of one or more steps. Each step supports:
+  - **Shell commands** (using the host’s shell)
+  - **Container executions** (spinning up a container with a given image and command arguments)
+- **`build`**: Captures details on how the container image is built, including Dockerfile location, build context, and tagging strategy (e.g., Git commit hash, SemVer, or a custom tag).
+- **`registry`**: Details for pushing the built image, including URL, repository, and a reference to a Kubernetes Secret or an external secret (e.g., via the external-secrets-operator) for credentials.
+- **`notifications`**: Optional configuration for sending status notifications (e.g., via webhook or email).
+
+Below is the CRD definition:
+
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: cipipelines.ci.example.com
+spec:
+  group: ci.example.com
+  names:
+    kind: CIPipeline
+    plural: cipipelines
+    singular: cipipeline
+    shortNames:
+      - cip
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                # Core CI functionality: Which system is being used.
+                ciSystem:
+                  type: string
+                  description: "The CI system to use (e.g., Jenkins, GitHub Actions, GitLab CI)."
+                # Event-based triggers for the pipeline.
+                triggers:
+                  type: object
+                  description: "Event-based trigger configuration."
+                  properties:
+                    event:
+                      type: string
+                      description: "Event type that triggers the pipeline (e.g., push, pull_request)."
+                    branch:
+                      type: string
+                      description: "Branch name filter for triggering the pipeline."
+                # Pre-build validation steps.
+                preBuildSteps:
+                  type: object
+                  description: "Optional pre-build validations and checks."
+                  properties:
+                    codeReview:
+                      type: object
+                      description: "Code review configuration."
+                      properties:
+                        required:
+                          type: boolean
+                          default: false
+                          description: "Indicates if a code review is mandatory."
+                        reviewers:
+                          type: array
+                          description: "List of designated reviewers."
+                          items:
+                            type: string
+                    secretsDetection:
+                      type: object
+                      description: "Secrets scanning configuration."
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                          description: "Enable secrets scanning (e.g., Gitleaks)."
+                        tool:
+                          type: string
+                          description: "Name of the secrets scanning tool."
+                    staticAnalysis:
+                      type: object
+                      description: "Static security scanning configuration."
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                          description: "Enable static analysis (SAST)."
+                        tool:
+                          type: string
+                          description: "Name of the static analysis tool (e.g., CodeQL)."
+                # Pipeline stages and steps.
+                stages:
+                  type: array
+                  description: "Ordered list of pipeline stages, each containing execution steps."
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Name of the stage."
+                      steps:
+                        type: array
+                        description: "Steps to execute in this stage."
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                              description: "Step name."
+                            type:
+                              type: string
+                              enum: ["shell", "container"]
+                              description: "Execution type: 'shell' for command line or 'container' for containerized execution."
+                            command:
+                              type: string
+                              description: "Shell command to execute (if type is 'shell')."
+                            image:
+                              type: string
+                              description: "Container image to use (if type is 'container')."
+                            args:
+                              type: array
+                              description: "Arguments for the container command."
+                              items:
+                                type: string
+                # Build configuration for generating the container image.
+                build:
+                  type: object
+                  description: "Settings for building the container image."
+                  properties:
+                    dockerfile:
+                      type: string
+                      description: "Path to the Dockerfile."
+                    context:
+                      type: string
+                      description: "Directory context for the build."
+                    taggingStrategy:
+                      type: string
+                      enum: ["git-commit", "semver", "custom"]
+                      description: "Strategy for tagging the built image."
+                    customTag:
+                      type: string
+                      description: "Custom tag value (if taggingStrategy is 'custom')."
+                # Registry details and secure credential retrieval.
+                registry:
+                  type: object
+                  description: "Container registry configuration."
+                  properties:
+                    url:
+                      type: string
+                      description: "Registry URL."
+                    repository:
+                      type: string
+                      description: "Repository name in the registry."
+                    credentialsRef:
+                      type: object
+                      description: "Reference to a Kubernetes Secret or external secret for registry credentials."
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                # Notification settings for pipeline events.
+                notifications:
+                  type: object
+                  description: "Notification configuration for pipeline events."
+                  properties:
+                    webhook:
+                      type: string
+                      description: "Webhook URL for notifications."
+                    email:
+                      type: string
+                      description: "Email address for notifications."
+              required:
+                - ciSystem
+                - stages
+                - build
+                - registry
+      subresources:
+        status: {}
+```
+
+---
+
+## 2. Example Manifests
+
+### **A. Basic CI Pipeline**
+
+This manifest defines a straightforward CI pipeline using GitHub Actions. It includes minimal pre-build checks and a simple two-stage process (build and push).
+
+```yaml
+apiVersion: ci.example.com/v1alpha1
+kind: CIPipeline
+metadata:
+  name: basic-ci-pipeline
+spec:
+  ciSystem: "GitHub Actions"
+  triggers:
+    event: "push"
+    branch: "main"
+  preBuildSteps:
+    codeReview:
+      required: true
+    secretsDetection:
+      enabled: true
+      tool: "Gitleaks"
+    staticAnalysis:
+      enabled: true
+      tool: "SonarQube"
+  stages:
+    - name: "Build Stage"
+      steps:
+        - name: "Build Image"
+          type: "shell"
+          command: "docker build -t myapp:$(git rev-parse --short HEAD) -f ./Dockerfile ."
+    - name: "Push Stage"
+      steps:
+        - name: "Push Image"
+          type: "shell"
+          command: "docker push myapp:$(git rev-parse --short HEAD)"
+  build:
+    dockerfile: "./Dockerfile"
+    context: "./"
+    taggingStrategy: "git-commit"
+  registry:
+    url: "https://registry.example.com"
+    repository: "myapp"
+    credentialsRef:
+      name: "registry-secret"
+      key: "password"
+  notifications:
+    webhook: "https://hooks.example.com/ci"
+```
+
+**Highlights:**
+
+- **CI System & Triggers:** Uses GitHub Actions and triggers on pushes to the main branch.
+- **Pre-Build Checks:** Ensures code review, secrets detection, and static analysis are in place.
+- **Stages:** Two-stage pipeline where the image is built and then pushed.
+- **Registry:** Uses an external secret reference for secure credential management.
+- **Notifications:** Configured to send updates via a webhook.
+
+---
+
+### **B. Complex CI Pipeline with Advanced Security & Custom Automation**
+
+This manifest demonstrates a more advanced configuration using Jenkins. It leverages multiple pre-build validations, custom triggers, and a mix of shell and container-based steps.
+
+```yaml
+apiVersion: ci.example.com/v1alpha1
+kind: CIPipeline
+metadata:
+  name: advanced-ci-pipeline
+spec:
+  ciSystem: "Jenkins"
+  triggers:
+    event: "pull_request"
+    branch: "develop"
+  preBuildSteps:
+    codeReview:
+      required: true
+      reviewers:
+        - "alice"
+        - "bob"
+    secretsDetection:
+      enabled: true
+      tool: "Gitleaks"
+    staticAnalysis:
+      enabled: true
+      tool: "CodeQL"
+  stages:
+    - name: "Pre-Build Validations"
+      steps:
+        - name: "Run Linter"
+          type: "shell"
+          command: "npm run lint"
+        - name: "Containerized Static Analysis"
+          type: "container"
+          image: "codeql-analysis:latest"
+          args: ["analyze", "./src"]
+    - name: "Build Stage"
+      steps:
+        - name: "Compile & Build"
+          type: "shell"
+          command: "docker build -t webapp:$(git rev-parse --short HEAD) -f ./Dockerfile ."
+    - name: "Security Scan"
+      steps:
+        - name: "Run Security Scanner"
+          type: "shell"
+          command: "docker run --rm webapp:latest security-scan"
+    - name: "Push Stage"
+      steps:
+        - name: "Push Image"
+          type: "shell"
+          command: "docker push webapp:$(git rev-parse --short HEAD)"
+  build:
+    dockerfile: "./Dockerfile"
+    context: "./"
+    taggingStrategy: "semver"
+  registry:
+    url: "https://private.registry.com"
+    repository: "webapp"
+    credentialsRef:
+      name: "private-registry-secret"
+      key: "auth"
+  notifications:
+    email: "devops@example.com"
+    webhook: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+```
+
+**Highlights:**
+
+- **CI System & Triggers:** Configured for Jenkins with pull-request triggers on the develop branch.
+- **Advanced Pre-Build Checks:** Enforces code review with a defined list of reviewers and includes both secrets detection and static analysis.
+- **Diverse Stages:** The pipeline is divided into multiple stages, including a pre-build validation stage with both shell and container steps, a build stage, a dedicated security scan stage, and a push stage.
+- **Custom Tagging:** Uses semantic versioning to tag the container image.
+- **Enhanced Notifications:** Sends alerts via both email and Slack webhook.
+
+---
+
+## Final Thoughts
+
+This CRD design provides a Kubernetes-native, flexible, and secure way to define your CI pipeline’s desired state. By clearly separating the build process (CI) from deployment (CD) and leveraging native Kubernetes resources like Secrets and ConfigMaps, you can create robust, maintainable CI workflows that integrate seamlessly with your cluster operations. Feel free to extend or modify the schema to suit your evolving CI requirements!
