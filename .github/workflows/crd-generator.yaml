@@ -7,8 +7,8 @@ on:
       - crd-template.yaml
   pull_request:
     paths:
-      - openapi.yaml
-      - crd-template.yaml
+      - src/openapi.yaml
+      - src/crd-template.yaml
 
 jobs:
   generate-crd:
