@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CIPipeline Wizard</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    .wizard-page { display: none; }
+    .wizard-page.active { display: block; }
+    .prebuild-step { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container my-5">
+    <h1 class="mb-4">CIPipeline Wizard</h1>
+    <div id="wizard">
+      
+      <!-- Page 1: Source Repository Information -->
+      <div id="page1" class="wizard-page active">
+        <h2>Source Repository Information</h2>
+        <form id="form-page1">
+          <div class="form-group">
+            <label for="repoUrl">Repository URL</label>
+            <input type="text" class="form-control" id="repoUrl" placeholder="https://github.com/example/my-repo.git" required>
+          </div>
+          <div class="form-group">
+            <label for="branch">Branch</label>
+            <input type="text" class="form-control" id="branch" placeholder="main" required>
+          </div>
+          <div class="form-group">
+            <label>Repository Credentials</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="repoCredType" id="repoInline" value="inline" checked>
+              <label class="form-check-label" for="repoInline">Inline External Secret</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="repoCredType" id="repoExisting" value="existing">
+              <label class="form-check-label" for="repoExisting">Existing Kubernetes Secret</label>
+            </div>
+          </div>
+          <div id="repoInlineFields">
+            <div class="form-group">
+              <label for="repoVaultAddress">Vault Address</label>
+              <input type="text" class="form-control" id="repoVaultAddress" placeholder="https://vault.example.com">
+            </div>
+            <div class="form-group">
+              <label for="repoSecretPath">Secret Path</label>
+              <input type="text" class="form-control" id="repoSecretPath" placeholder="secret/data/my-repo-creds">
+            </div>
+            <div class="form-group">
+              <label for="repoAuthMethod">Authentication Method</label>
+              <select class="form-control" id="repoAuthMethod">
+                <option value="token">Token</option>
+                <option value="appRole">AppRole</option>
+                <option value="kubernetes">Kubernetes</option>
+              </select>
+            </div>
+            <!-- Auth credentials (for simplicity, only token field shown) -->
+            <div class="form-group" id="repoAuthCredentials">
+              <label for="repoToken">Token</label>
+              <input type="text" class="form-control" id="repoToken" placeholder="Token for Vault authentication">
+            </div>
+          </div>
+          <div class="form-group" id="repoExistingField" style="display:none;">
+            <label for="repoExistingSecret">Existing Secret Name</label>
+            <input type="text" class="form-control" id="repoExistingSecret" placeholder="my-repo-credentials">
+          </div>
+          <button type="button" class="btn btn-primary next-btn">Next</button>
+        </form>
+      </div>
+      
+      <!-- Page 2: CI System & Trigger Configuration -->
+      <div id="page2" class="wizard-page">
+        <h2>CI System & Trigger Configuration</h2>
+        <form id="form-page2">
+          <div class="form-group">
+            <label for="ciSystem">CI System</label>
+            <select class="form-control" id="ciSystem">
+              <option value="jenkins">Jenkins</option>
+              <option value="github">GitHub Actions</option>
+              <option value="gitlab">GitLab CI</option>
+              <option value="azure">Azure Pipelines</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="triggerEvent">Trigger Event</label>
+            <select class="form-control" id="triggerEvent">
+              <option value="push">Push</option>
+              <option value="pull_request">Pull Request</option>
+              <option value="scheduled">Scheduled</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="triggerBranch">Branch Filter</label>
+            <input type="text" class="form-control" id="triggerBranch" placeholder="main, develop, feature/*">
+          </div>
+          <button type="button" class="btn btn-secondary back-btn">Back</button>
+          <button type="button" class="btn btn-primary next-btn">Next</button>
+        </form>
+      </div>
+      
+      <!-- Page 3: Pre-Build Steps -->
+      <div id="page3" class="wizard-page">
+        <h2>Pre‑Build Steps</h2>
+        <form id="form-page3">
+          <div id="preBuildStepsContainer">
+            <!-- Start with one pre-build step as a sample -->
+            <div class="prebuild-step">
+              <div class="form-group">
+                <label for="stepType_1">Step Type</label>
+                <select class="form-control stepType" id="stepType_1">
+                  <option value="Linter">Linter</option>
+                  <option value="CodeReview">CodeReview</option>
+                  <option value="CustomStep">CustomStep</option>
+                  <option value="SecretScan">SecretScan</option>
+                </select>
+              </div>
+              <div class="step-fields" id="stepFields_1">
+                <!-- Default Linter fields -->
+                <div class="form-group">
+                  <label for="linterTool_1">Linter Tool Name</label>
+                  <select class="form-control" id="linterTool_1">
+                    <option value="eslint">eslint</option>
+                    <option value="pylint">pylint</option>
+                    <option value="flake8">flake8</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="linterConfigPath_1">Config Path</label>
+                  <input type="text" class="form-control" id="linterConfigPath_1" placeholder=".eslintrc.json">
+                </div>
+                <div class="form-group">
+                  <label for="linterGlobPatterns_1">Glob Patterns</label>
+                  <input type="text" class="form-control" id="linterGlobPatterns_1" placeholder="src/**/*.js">
+                </div>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary" id="addStepBtn">Add Another Step</button>
+          <br/><br/>
+          <button type="button" class="btn btn-secondary back-btn">Back</button>
+          <button type="button" class="btn btn-primary next-btn">Next</button>
+        </form>
+      </div>
+      
+      <!-- Page 4: OCI Build Configuration -->
+      <div id="page4" class="wizard-page">
+        <h2>OCI Build Configuration</h2>
+        <form id="form-page4">
+          <div class="form-group">
+            <label for="dockerfilePath">Dockerfile Path</label>
+            <input type="text" class="form-control" id="dockerfilePath" placeholder="Dockerfile.complex">
+          </div>
+          <div class="form-group">
+            <label for="contextDirectory">Context Directory</label>
+            <input type="text" class="form-control" id="contextDirectory" placeholder="app/">
+          </div>
+          <div class="form-group">
+            <label for="taggingStrategy">Tagging Strategy</label>
+            <select class="form-control" id="taggingStrategy">
+              <option value="git-commit">git-commit</option>
+              <option value="semver">semver</option>
+              <option value="custom">custom</option>
+            </select>
+          </div>
+          <div class="form-group" id="customTagField" style="display:none;">
+            <label for="customTag">Custom Tag</label>
+            <input type="text" class="form-control" id="customTag" placeholder="v1.0.0">
+          </div>
+          <button type="button" class="btn btn-secondary back-btn">Back</button>
+          <button type="button" class="btn btn-primary next-btn">Next</button>
+        </form>
+      </div>
+      
+      <!-- Page 5: OCI Registry Configuration -->
+      <div id="page5" class="wizard-page">
+        <h2>OCI Registry Configuration</h2>
+        <form id="form-page5">
+          <div class="form-group">
+            <label for="registryURL">Registry URL</label>
+            <input type="text" class="form-control" id="registryURL" placeholder="registry.example.com">
+          </div>
+          <div class="form-group">
+            <label for="registryRepoName">Repository Name in Registry</label>
+            <input type="text" class="form-control" id="registryRepoName" placeholder="my-image-repo">
+          </div>
+          <div class="form-group">
+            <label>Registry Credentials</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="registryCredType" id="registryInline" value="inline" checked>
+              <label class="form-check-label" for="registryInline">Inline External Secret</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="registryCredType" id="registryExisting" value="existing">
+              <label class="form-check-label" for="registryExisting">Existing Kubernetes Secret</label>
+            </div>
+          </div>
+          <div id="registryInlineFields">
+            <div class="form-group">
+              <label for="registryVaultAddress">Vault Address</label>
+              <input type="text" class="form-control" id="registryVaultAddress" placeholder="https://vault.example.com">
+            </div>
+            <div class="form-group">
+              <label for="registrySecretPath">Secret Path</label>
+              <input type="text" class="form-control" id="registrySecretPath" placeholder="secret/data/my-registry-creds">
+            </div>
+            <div class="form-group">
+              <label for="registryAuthMethod">Authentication Method</label>
+              <select class="form-control" id="registryAuthMethod">
+                <option value="token">Token</option>
+                <option value="appRole">AppRole</option>
+                <option value="kubernetes">Kubernetes</option>
+              </select>
+            </div>
+            <div class="form-group" id="registryAuthCredentials">
+              <label for="registryToken">Token</label>
+              <input type="text" class="form-control" id="registryToken" placeholder="Token for Vault authentication">
+            </div>
+          </div>
+          <div class="form-group" id="registryExistingField" style="display:none;">
+            <label for="registryExistingSecret">Existing Secret Name</label>
+            <input type="text" class="form-control" id="registryExistingSecret" placeholder="my-registry-credentials">
+          </div>
+          <button type="button" class="btn btn-secondary back-btn">Back</button>
+          <button type="button" class="btn btn-primary next-btn">Next</button>
+        </form>
+      </div>
+      
+      <!-- Page 6: Notification Settings -->
+      <div id="page6" class="wizard-page">
+        <h2>Notification Settings</h2>
+        <form id="form-page6">
+          <div class="form-group">
+            <label for="webhookURL">Webhook URL</label>
+            <input type="text" class="form-control" id="webhookURL" placeholder="https://hooks.example.com/notify">
+          </div>
+          <div class="form-group">
+            <label for="notificationEmail">Notification Email</label>
+            <input type="email" class="form-control" id="notificationEmail" placeholder="ops@example.com">
+          </div>
+          <button type="button" class="btn btn-secondary back-btn">Back</button>
+          <button type="button" class="btn btn-primary next-btn">Next</button>
+        </form>
+      </div>
+      
+      <!-- Page 7: Review & Generate -->
+      <div id="page7" class="wizard-page">
+        <h2>Review Your Inputs</h2>
+        <div id="reviewSummary">
+          <!-- Summary will be populated dynamically -->
+        </div>
+        <button type="button" class="btn btn-secondary back-btn">Back</button>
+        <button type="button" class="btn btn-success" id="generateManifestBtn">Generate Manifest</button>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Include jQuery and Bootstrap JS -->
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    $(document).ready(function() {
+      let currentPage = 1;
+      const totalPages = 7;
+      
+      function showPage(page) {
+        $('.wizard-page').removeClass('active');
+        $('#page' + page).addClass('active');
+      }
+      
+      $('.next-btn').click(function() {
+        if(currentPage < totalPages) {
+          currentPage++;
+          showPage(currentPage);
+        }
+      });
+      
+      $('.back-btn').click(function() {
+        if(currentPage > 1) {
+          currentPage--;
+          showPage(currentPage);
+        }
+      });
+      
+      // Toggle repository credential fields
+      $('input[name="repoCredType"]').change(function() {
+        if($(this).val() === 'inline') {
+          $('#repoInlineFields').show();
+          $('#repoExistingField').hide();
+        } else {
+          $('#repoInlineFields').hide();
+          $('#repoExistingField').show();
+        }
+      });
+      
+      // Toggle registry credential fields
+      $('input[name="registryCredType"]').change(function() {
+        if($(this).val() === 'inline') {
+          $('#registryInlineFields').show();
+          $('#registryExistingField').hide();
+        } else {
+          $('#registryInlineFields').hide();
+          $('#registryExistingField').show();
+        }
+      });
+      
+      // Toggle custom tag field based on tagging strategy
+      $('#taggingStrategy').change(function() {
+        if($(this).val() === 'custom') {
+          $('#customTagField').show();
+        } else {
+          $('#customTagField').hide();
+        }
+      });
+      
+      // Handler to add additional pre-build steps
+      let stepCounter = 1;
+      $('#addStepBtn').click(function() {
+        stepCounter++;
+        const stepHtml = `
+          <div class="prebuild-step">
+            <div class="form-group">
+              <label for="stepType_${stepCounter}">Step Type</label>
+              <select class="form-control stepType" id="stepType_${stepCounter}">
+                <option value="Linter">Linter</option>
+                <option value="CodeReview">CodeReview</option>
+                <option value="CustomStep">CustomStep</option>
+                <option value="SecretScan">SecretScan</option>
+              </select>
+            </div>
+            <div class="step-fields" id="stepFields_${stepCounter}">
+              <!-- Default assume Linter fields -->
+              <div class="form-group">
+                <label for="linterTool_${stepCounter}">Linter Tool Name</label>
+                <select class="form-control" id="linterTool_${stepCounter}">
+                  <option value="eslint">eslint</option>
+                  <option value="pylint">pylint</option>
+                  <option value="flake8">flake8</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="linterConfigPath_${stepCounter}">Config Path</label>
+                <input type="text" class="form-control" id="linterConfigPath_${stepCounter}" placeholder=".eslintrc.json">
+              </div>
+              <div class="form-group">
+                <label for="linterGlobPatterns_${stepCounter}">Glob Patterns</label>
+                <input type="text" class="form-control" id="linterGlobPatterns_${stepCounter}" placeholder="src/**/*.js">
+              </div>
+            </div>
+          </div>
+        `;
+        $('#preBuildStepsContainer').append(stepHtml);
+      });
+      
+      // Generate review summary (for demo purposes)
+      $('#generateManifestBtn').click(function() {
+        let summaryHtml = '<h3>Review Summary</h3>';
+        summaryHtml += `<p><strong>Repository URL:</strong> ${$('#repoUrl').val()}</p>`;
+        summaryHtml += `<p><strong>Branch:</strong> ${$('#branch').val()}</p>`;
+        summaryHtml += `<p><strong>CI System:</strong> ${$('#ciSystem').val()}</p>`;
+        // You can extend this to include other form values...
+        $('#reviewSummary').html(summaryHtml);
+        alert("Manifest generation logic would process these inputs now.");
+      });
+    });
+  </script>
+</body>
+</html>
+
