@@ -3,12 +3,13 @@ name: Generate CIPipeline CRD
 on:
   push:
     paths:
-      - openapi.yaml
-      - crd-template.yaml
+      - src/openapi.yaml
+      - src/crd-template.yaml
   pull_request:
     paths:
       - src/openapi.yaml
       - src/crd-template.yaml
+  workflow_dispatch:
 
 jobs:
   generate-crd:
