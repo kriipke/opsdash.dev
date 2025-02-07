@@ -1,8 +1,10 @@
-Below are several example manifests that illustrate a range of use cases for the latest CIPipeline CRD. These examples demonstrate—from the most minimal to more complex pipelines—how you can specify repository and registry credentials either by hardcoding an inline external secret definition (with Vault details) or by referencing an existing Kubernetes secret. In every case, the rule is that exactly one of `externalSecret` (which provides an inline SecretSource configuration) or `existingSecret` (which names an already existing Kubernetes secret) must be provided.
+= opsdash
+toc:
+toclevels: 2
 
----
+== `CIPipeline` Usage
 
-== Example 1: Minimal Pipeline Using Existing Secrets
+=== Example 1: Minimal Pipeline Using Existing Secrets
 
 In this simple example, both the source repository and the container registry credentials are provided via existing Kubernetes secrets. No pre‑build steps or triggers are defined.
 
@@ -31,7 +33,7 @@ spec:
 
 ---
 
-== Example 2: Complex Pipeline Using Inline ExternalSecrets with Hardcoded Vault Credentials
+=== Example 2: Complex Pipeline Using Inline ExternalSecrets with Hardcoded Vault Credentials
 
 This example illustrates a more advanced pipeline with triggers, pre‑build steps (organized into separate arrays), and notifications. Both the repository and registry credentials are provided via inline externalSecret definitions that include Vault connection details and hardcoded tokens.
 
@@ -96,7 +98,7 @@ spec:
 
 ---
 
-== Example 3: Mixed Credential Approaches
+=== Example 3: Mixed Credential Approaches
 
 In this example, the repository credentials are provided via an existing secret while the registry credentials use an inline externalSecret that itself references an existing Kubernetes secret (via its `existingSecret` field). This mixed approach allows you to mix and match your credential sourcing methods.
 
@@ -130,7 +132,7 @@ spec:
 
 ---
 
-== Example 4: Advanced Pipeline with Multiple Pre‑Build Steps and Advanced Triggers
+=== Example 4: Advanced Pipeline with Multiple Pre‑Build Steps and Advanced Triggers
 
 This comprehensive example shows an advanced configuration that includes multiple pre‑build steps (two linters, one code review, one custom step, and one secret scan), detailed triggers (for pull requests on feature branches), and notifications. The repository credentials are specified via an inline externalSecret referencing an existing Kubernetes secret, while the registry credentials are provided by an existing secret.
 
