@@ -1,0 +1,363 @@
+Below is an updated design for a Kubernetes Custom Resource Definition (CRD) that not only defines a CI pipeline for building and pushing container images but also includes a new field to specify which CI language (or configuration style) should be generated. This allows you to generate, for example, a Jenkinsfile, a GitHub Actions workflow, or a GitLab CI configuration, based on your preference.
+
+Below, you’ll find the revised CRD specification along with updated sample manifests that incorporate the new `ciLanguage` field.
+
+---
+
+## Kubernetes CRD Specification (v1alpha1)
+
+```yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: cipipelines.ci.example.com
+spec:
+  group: ci.example.com
+  names:
+    plural: cipipelines
+    singular: cipipeline
+    kind: CIPipeline
+    shortNames:
+      - cip
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          description: >
+            CIPipeline defines the desired state for a Continuous Integration pipeline that builds and pushes container images only after all configured pre-build steps (code reviews,
+            secrets scanning, static analysis, etc.) have succeeded. In addition, the resource allows specification of the CI language configuration to be generated
+            (e.g. Jenkinsfile, GitHub Actions, GitLab CI, etc.).
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                ciLanguage:
+                  type: string
+                  description: >
+                    Specifies the CI language or configuration style to be produced. For example, 'jenkins' will generate a Jenkinsfile,
+                    'github-actions' will produce a GitHub Actions workflow, and 'gitlab-ci' will produce a GitLab CI configuration.
+                  enum:
+                    - jenkins
+                    - github-actions
+                    - gitlab-ci
+                    - travis
+                    - circleci
+                    - custom
+                trigger:
+                  type: object
+                  description: Defines what starts the pipeline.
+                  properties:
+                    type:
+                      type: string
+                      description: "Trigger type: git, manual, or schedule"
+                      enum:
+                        - git
+                        - manual
+                        - schedule
+                    git:
+                      type: object
+                      description: "Git-based trigger configuration"
+                      properties:
+                        branch:
+                          type: string
+                          description: "Branch to watch for changes"
+                        event:
+                          type: string
+                          description: "Event type triggering the pipeline"
+                          enum:
+                            - push
+                            - pull_request
+                  required:
+                    - type
+                preBuild:
+                  type: array
+                  description: "Optional pre-build steps (e.g. code review, secrets scan, static analysis)"
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Human-readable name for the step"
+                      type:
+                        type: string
+                        description: "Step type identifier (codeReview, gitleaks, staticScan, custom)"
+                        enum:
+                          - codeReview
+                          - gitleaks
+                          - staticScan
+                          - custom
+                      enabled:
+                        type: boolean
+                        description: "Enable or disable this step"
+                        default: true
+                      config:
+                        type: object
+                        description: "Arbitrary configuration for the step"
+                        additionalProperties: true
+                  default: []
+                build:
+                  type: object
+                  description: "Container image build configuration"
+                  properties:
+                    dockerfile:
+                      type: string
+                      description: "Path to the Dockerfile used in the build"
+                    context:
+                      type: string
+                      description: "Build context directory"
+                    args:
+                      type: object
+                      description: "Build arguments passed to Docker"
+                      additionalProperties:
+                        type: string
+                    image:
+                      type: object
+                      description: "Image repository and tagging strategy"
+                      properties:
+                        repository:
+                          type: string
+                          description: "Container registry repository (e.g. registry.example.com/webservice)"
+                        tagStrategy:
+                          type: string
+                          description: "Strategy for tagging images"
+                          enum:
+                            - git-commit
+                            - semver
+                            - custom
+                        semver:
+                          type: object
+                          description: "Semantic versioning options (used when tagStrategy is semver)"
+                          properties:
+                            enforce:
+                              type: boolean
+                              description: "Whether to enforce semantic versioning rules"
+                    registryCredentials:
+                      type: object
+                      description: "Configuration for retrieving container registry credentials from an external secrets manager"
+                      properties:
+                        secretRef:
+                          type: string
+                          description: "Reference to the external secret holding registry credentials"
+                        provider:
+                          type: string
+                          description: "Name of the secrets manager provider (e.g. vault, aws, gcp)"
+                  required:
+                    - dockerfile
+                    - context
+                    - image
+                    - registryCredentials
+                postBuild:
+                  type: array
+                  description: "Optional post-build steps (e.g. custom scripts)"
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      type:
+                        type: string
+                        description: "Type identifier for the post-build step"
+                      enabled:
+                        type: boolean
+                        default: true
+                      config:
+                        type: object
+                        description: "Step-specific configuration"
+                        additionalProperties: true
+                  default: []
+                notifications:
+                  type: array
+                  description: "Configuration for pipeline notifications"
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        description: "Notification type (e.g. slack, email, webhook)"
+                        enum:
+                          - slack
+                          - email
+                          - webhook
+                      config:
+                        type: object
+                        description: "Notification configuration details"
+                        additionalProperties: true
+                  default: []
+                podTemplate:
+                  type: object
+                  description: "Pod template for executing pipeline stages (integrates with Kubernetes Pods)"
+                  properties:
+                    metadata:
+                      type: object
+                      description: "Pod metadata (labels, annotations)"
+                    spec:
+                      type: object
+                      description: "Pod spec (resources, tolerations, etc.)"
+                      additionalProperties: true
+              required:
+                - trigger
+                - build
+      subresources:
+        status: {}
+```
+
+---
+
+## Updated Example Manifests
+
+Below are a few sample custom resource manifests showcasing different configurations with the new `ciLanguage` field included.
+
+### 1. Standard CI Pipeline Configuration (GitHub Actions)
+
+In this example, the pipeline is triggered on a Git push to the `main` branch and is intended to produce a GitHub Actions workflow. Pre-build steps include a code review check, secrets scanning, and a static security scan. The image is tagged using the Git commit hash and notifications are sent via Slack.
+
+```yaml
+apiVersion: ci.example.com/v1alpha1
+kind: CIPipeline
+metadata:
+  name: webservice-ci
+spec:
+  ciLanguage: github-actions
+  trigger:
+    type: git
+    git:
+      branch: main
+      event: push
+  preBuild:
+    - name: Code Review Check
+      type: codeReview
+      enabled: true
+      config:
+        requiredApprovals: 2
+    - name: Secrets Scan
+      type: gitleaks
+      enabled: true
+    - name: Static Security Scan
+      type: staticScan
+      enabled: true
+      config:
+        tool: "sonarqube"
+  build:
+    dockerfile: "./Dockerfile"
+    context: "./"
+    args:
+      ENV: "production"
+    image:
+      repository: "registry.example.com/webservice"
+      tagStrategy: "git-commit"
+    registryCredentials:
+      secretRef: "ext-registry-credentials"
+      provider: "external-secrets"
+  notifications:
+    - type: slack
+      config:
+        channel: "#ci-notifications"
+        webhookUrl: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+```
+
+---
+
+### 2. Complex CI Pipeline with Multiple Security Checks (GitLab CI)
+
+This example defines a scheduled pipeline (e.g. nightly builds) that generates a GitLab CI configuration. It includes a stricter code review step, multiple security scans, and enforces Semantic Versioning for image tagging. Notifications are sent via both email and a webhook.
+
+```yaml
+apiVersion: ci.example.com/v1alpha1
+kind: CIPipeline
+metadata:
+  name: webservice-ci-complex
+spec:
+  ciLanguage: gitlab-ci
+  trigger:
+    type: schedule
+    # Additional scheduling details may be provided via annotations or a dedicated field.
+  preBuild:
+    - name: Code Review Check
+      type: codeReview
+      enabled: true
+      config:
+        requiredApprovals: 3
+    - name: Secrets Scan
+      type: gitleaks
+      enabled: true
+      config:
+        severity: "high"
+    - name: Static Application Security Test
+      type: staticScan
+      enabled: true
+      config:
+        tool: "bandit"
+    - name: Custom Lint Check
+      type: custom
+      enabled: true
+      config:
+        script: "./scripts/lint.sh"
+  build:
+    dockerfile: "./Dockerfile"
+    context: "./app"
+    args:
+      ENV: "staging"
+    image:
+      repository: "registry.example.com/webservice"
+      tagStrategy: "semver"
+      semver:
+        enforce: true
+    registryCredentials:
+      secretRef: "ext-registry-credentials"
+      provider: "external-secrets"
+  postBuild:
+    - name: Post Build Notification
+      type: custom
+      enabled: true
+      config:
+        script: "./scripts/post-build.sh"
+  notifications:
+    - type: email
+      config:
+        recipients:
+          - "devops@example.com"
+          - "security@example.com"
+    - type: webhook
+      config:
+        url: "https://ci-notify.example.com/hook"
+        method: "POST"
+```
+
+---
+
+### 3. Minimal Pipeline with Manual Trigger (Jenkins)
+
+This minimal example shows a CI pipeline started manually and configured to generate a Jenkinsfile. It only includes the essential build configuration without any pre-build or notification steps.
+
+```yaml
+apiVersion: ci.example.com/v1alpha1
+kind: CIPipeline
+metadata:
+  name: webservice-ci-manual
+spec:
+  ciLanguage: jenkins
+  trigger:
+    type: manual
+  build:
+    dockerfile: "./Dockerfile"
+    context: "."
+    args: {}
+    image:
+      repository: "registry.example.com/webservice"
+      tagStrategy: "git-commit"
+    registryCredentials:
+      secretRef: "ext-registry-credentials"
+      provider: "external-secrets"
+```
+
+---
+
+## Final Thoughts
+
+This iteration of the CRD design not only covers the necessary pipeline components—triggers, pre-build steps, build configuration, post-build tasks, notifications, and pod templates—but also includes a new `ciLanguage` field. This field gives you the flexibility to target different CI systems (like Jenkins, GitHub Actions, or GitLab CI) and generate the appropriate configuration artifacts.
+
+The modular design makes it easy to extend and adapt to evolving CI workflows, while ensuring integration with Kubernetes-native resources and external secrets managers for secure handling of credentials. Feel free to adjust the schema further to meet your organization’s specific requirements.
