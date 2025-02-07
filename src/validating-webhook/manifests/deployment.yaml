@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validating-webhook
+  labels:
+    app: validating-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: validating-webhook
+  template:
+    metadata:
+      labels:
+        app: validating-webhook
+    spec:
+      containers:
+        - name: validating-webhook
+          image: your-docker-repo/validating-webhook:latest
+          ports:
+            - containerPort: 443

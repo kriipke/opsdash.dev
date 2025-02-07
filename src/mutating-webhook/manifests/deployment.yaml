@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mutating-webhook
+  labels:
+    app: mutating-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mutating-webhook
+  template:
+    metadata:
+      labels:
+        app: mutating-webhook
+    spec:
+      containers:
+        - name: mutating-webhook
+          image: your-docker-repo/mutating-webhook:latest
+          ports:
+            - containerPort: 443

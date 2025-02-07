@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: cipipeline-mutating-webhook
+webhooks:
+  - name: mutating-webhook.opsdash.dev
+    clientConfig:
+      service:
+        name: mutating-webhook-service
+        namespace: default
+        path: "/mutate"
+      caBundle: <base64-encoded-ca-cert>
+    rules:
+      - apiGroups:
+          - opsdash.dev
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - cipipelines
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None

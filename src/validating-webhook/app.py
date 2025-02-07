@@ -46,6 +46,6 @@ def validate():
     return jsonify(response)
 
 if __name__ == '__main__':
-    # In a production environment, you must serve over TLS with proper certificates.
+    # In production, serve over TLS with valid certificates.
     # Replace 'server.crt' and 'server.key' with your certificate and key files.
     app.run(host="0.0.0.0", port=443, ssl_context=('server.crt', 'server.key'))
