@@ -511,7 +511,198 @@ These examples demonstrate the flexibility of the latest CIPipeline CRD. They co
 
 
 
+== UI Wizard
 
+Below is an outline for a multi‐page web form “wizard” that gathers all the data needed to template out a CIPipeline manifest. In this design, the user is first prompted for source repository details, and then taken step‐by‐step through additional pages that collect CI system preferences, pre‑build steps (which later get split into separate arrays by a mutating webhook), OCI build details, OCI registry settings, and notifications. At the end, a review page allows the user to verify their inputs before generating the final CIPipeline manifest.
+
+---
+
+# Wizard Outline for Creating a CIPipeline Manifest
+
+## **Page 1: Source Repository Information**
+
+**Purpose:** Collect the repository URL, branch, and credentials for accessing the source code.
+
+- **Repository URL:**  
+  _Text Field_  
+  *(e.g., https://github.com/example/my-repo.git)*
+
+- **Branch:**  
+  _Text Field_  
+  *(e.g., main, develop)*
+
+- **Repository Credentials:**  
+  *Choose one of the following (radio buttons or a dropdown):*
+  - **Inline Credential Definition (externalSecret):**  
+    - **Vault Address:**  
+      _Text Field_  
+      *(e.g., https://vault.example.com)*
+    - **Secret Path:**  
+      _Text Field_  
+      *(e.g., secret/data/my-repo-creds)*
+    - **Authentication Method:**  
+      _Dropdown_  
+      Options: token, appRole, kubernetes
+    - **Depending on the Authentication Method:**  
+      - If **token**:  
+        - **Token:** _Text Field_
+      - If **appRole**:  
+        - **Role ID:** _Text Field_  
+        - **Secret ID:** _Text Field_
+      - If **kubernetes**:  
+        - **JWT:** _Text Field_
+  - **Existing Kubernetes Secret Reference (existingSecret):**  
+    - **Existing Secret Name:**  
+      _Text Field_  
+      *(e.g., my-repo-credentials)*
+
+*Note: Only one method should be provided.*
+
+---
+
+## **Page 2: CI System & Trigger Configuration**
+
+**Purpose:** Choose the CI system and configure triggers for the pipeline.
+
+- **CI System:**  
+  _Dropdown_  
+  Options: jenkins, github, gitlab, azure
+
+- **Trigger Configuration:**  
+  - **Event Type:**  
+    _Dropdown_ or _Radio Buttons_  
+    Options: push, pull_request, scheduled, etc.
+  - **Branch Filter:**  
+    _Text Field_  
+    *(e.g., main, develop, feature/*)*
+
+---
+
+## **Page 3: Pre‑Build Steps**
+
+**Purpose:** Gather pre‑build step details in a unified array. (The mutating webhook will later split these into separate arrays based on the “type” field and assign each a job number.)
+
+- **Unified PreBuildSteps List:**  
+  Allow the user to add one or more steps; for each step, ask:
+  
+  1. **Step Type:**  
+     _Dropdown_  
+     Options: Linter, CodeReview, CustomStep, SecretScan
+
+  2. **Based on the Selected Type, Show Relevant Fields:**
+
+     - **For Linter:**  
+       - **Tool Name:** _Dropdown_ (e.g., eslint, pylint, flake8, etc.)  
+       - **Config Path:** _Text Field_  
+       - **Glob Patterns:**  
+         _Multi-line Text Field or tag input_ (e.g., "src/**/*.js", etc.)
+
+     - **For CodeReview:**  
+       - **Code Reviewer Type:** _Dropdown_ (Options: human, llm)  
+       - **Reviewer Identifier:** _Text Field_  
+         *(For “human”, provide an email; for “llm”, provide a tool name)*
+
+     - **For CustomStep:**  
+       - **Command:** _Text Field_  
+       - **Shell:** _Dropdown_ (Options: sh, bash, zsh)  
+       - **Container Image:** _Text Field_  
+       - **Success Criteria:**  
+         - **Expected Status Code:** _Number Field_  
+         - **Output Regex:** _Text Field_
+
+     - **For SecretScan:**  
+       - **Tool Name:** _Dropdown_ (Options: gitleaks, trufflehog, etc.)  
+       - **Config Path:** _Text Field_  
+       - **Glob Patterns:** _Multi-line Text Field or tag input_
+
+*Allow the user to add multiple pre‑build steps (maintaining the order in which they are added).*
+
+---
+
+## **Page 4: OCI Build Configuration**
+
+**Purpose:** Collect details for building the container image.
+
+- **Dockerfile Path:**  
+  _Text Field_  
+  *(e.g., Dockerfile.complex)*
+
+- **Context Directory:**  
+  _Text Field_  
+  *(e.g., app/ or .)*
+
+- **Tagging Strategy:**  
+  _Dropdown_  
+  Options: git-commit, semver, custom
+  - **If “custom” is selected:**  
+    - **Custom Tag:** _Text Field_  
+      *(This field is required when the tagging strategy is custom.)*
+
+---
+
+## **Page 5: OCI Registry Configuration**
+
+**Purpose:** Gather information for pushing the built image to a container registry.
+
+- **Registry URL:**  
+  _Text Field_  
+  *(e.g., registry.example.com)*
+
+- **Repository Name in Registry:**  
+  _Text Field_  
+  *(e.g., my-image-repo)*
+
+- **Registry Credentials:**  
+  *Choose one of the following (radio buttons or a dropdown):*
+  - **Inline Credential Definition (externalSecret):**  
+    - **Vault Address:** _Text Field_  
+    - **Secret Path:** _Text Field_  
+    - **Authentication Method:** _Dropdown_ (Options: token, appRole, kubernetes)
+    - **Based on the chosen auth method, prompt for:**
+      - For **token**:  
+        - **Token:** _Text Field_
+      - For **appRole**:  
+        - **Role ID:** _Text Field_  
+        - **Secret ID:** _Text Field_
+      - For **kubernetes**:  
+        - **JWT:** _Text Field_
+  - **Existing Kubernetes Secret Reference (existingSecret):**  
+    - **Existing Secret Name:** _Text Field_
+
+*Again, only one of these methods should be provided.*
+
+---
+
+## **Page 6: Notification Settings**
+
+**Purpose:** Set up notifications for pipeline events.
+
+- **Webhook URL:**  
+  _Text Field_  
+  *(e.g., https://hooks.example.com/notify)*
+
+- **Notification Email:**  
+  _Text Field_  
+  *(e.g., ops@example.com)*
+
+---
+
+## **Page 7: Review & Generate**
+
+**Purpose:** Present a summary of all collected inputs for user confirmation before generating the CIPipeline manifest.
+
+- **Summary Page:**  
+  - Display all entered data organized by section (Source Repository, CI System & Triggers, Pre‑Build Steps, OCI Build, OCI Registry, Notifications).
+  - Allow the user to go back and edit any section.
+
+- **Generate Manifest Button:**  
+  - When clicked, this will output the fully templated CIPipeline manifest (which includes the original pre‑build steps in a unified array; note that downstream, a mutating webhook will transform them into separate arrays with job numbers).
+
+---
+
+This outline can be used to design a dynamic, multi‑page web form (wizard) that guides the user through all necessary questions. The collected data is then used to generate a complete CIPipeline manifest, ensuring that even complex pipelines with multiple pre‑build steps and diverse credential configurations are fully supported.
+
+Happy designing!
 
 
 
