@@ -21,7 +21,7 @@ spec:
           info:
             title: CIPipeline API
             description: API specification for managing CI Pipelines
-            version: 1.0.0
+            version: 1.0.1
           components:
             schemas:
               CodeReview:
